@@ -32,6 +32,13 @@ const RoomChatPage: React.FC = () => {
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([]);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistStage, setPlaylistStage] = useState<"input" | "preview">(
+    "input"
+  );
+  const [playlistLocked, setPlaylistLocked] = useState(false);
+  const [lastFetchedPlaylistId, setLastFetchedPlaylistId] = useState<
+    string | null
+  >(null);
 
   const socketRef = useRef<ClientSocket | null>(null);
   const currentRoomIdRef = useRef<string | null>(null);
@@ -143,7 +150,7 @@ const RoomChatPage: React.FC = () => {
           setMessages(state.messages);
           currentRoomIdRef.current = state.room.id;
           setRoomNameInput("");
-          setStatusText(`房間建立成功：${state.room.name}`);
+          setStatusText(`成功建立房間：${state.room.name}`);
         } else {
           setStatusText(`建立房間失敗：${ack.error}`);
         }
@@ -166,7 +173,7 @@ const RoomChatPage: React.FC = () => {
         setParticipants(state.participants);
         setMessages(state.messages);
         currentRoomIdRef.current = state.room.id;
-        setStatusText(`加入房間：${state.room.name}`);
+        setStatusText(`已加入房間：${state.room.name}`);
       } else {
         setStatusText(`加入房間失敗：${ack.error}`);
       }
@@ -206,7 +213,7 @@ const RoomChatPage: React.FC = () => {
       (ack) => {
         if (!ack) return;
         if (!ack.ok) {
-          setStatusText(`訊息發送失敗：${ack.error}`);
+          setStatusText(`訊息傳送失敗：${ack.error}`);
         }
       }
     );
@@ -253,6 +260,11 @@ const RoomChatPage: React.FC = () => {
 
   const handleFetchPlaylist = async () => {
     setPlaylistError(null);
+    if (playlistLocked && lastFetchedPlaylistId) {
+      setPlaylistError("歌單已鎖定，如要重選請先返回歌單挑選");
+      return;
+    }
+
     const playlistId = extractPlaylistId(playlistUrl);
     if (!playlistId) {
       setPlaylistError("請輸入有效的播放清單網址");
@@ -261,7 +273,7 @@ const RoomChatPage: React.FC = () => {
 
     const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined;
     if (!apiKey) {
-      setPlaylistError("尚未設定 YouTube API 金鑰 (VITE_YOUTUBE_API_KEY)");
+      setPlaylistError("尚未設置 YouTube API 金鑰 (VITE_YOUTUBE_API_KEY)");
       return;
     }
 
@@ -286,7 +298,7 @@ const RoomChatPage: React.FC = () => {
           `https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`
         );
         if (!res.ok) {
-          throw new Error("無法取得播放清單，請稍後再試");
+          throw new Error("取得播放清單失敗，請稍後再試");
         }
 
         const data = await res.json();
@@ -359,14 +371,27 @@ const RoomChatPage: React.FC = () => {
       } while (nextPageToken);
 
       setPlaylistItems(items);
+      setPlaylistStage("preview");
+      setPlaylistLocked(true);
+      setLastFetchedPlaylistId(playlistId);
       setStatusText(`已載入播放清單，共 ${items.length} 首歌曲`);
     } catch (error) {
       console.error(error);
-      setPlaylistError("解析播放清單時發生錯誤，請確認連結後重試");
+      setPlaylistError("取得播放清單時發生錯誤，請確認網址後再試");
       setPlaylistItems([]);
     } finally {
       setPlaylistLoading(false);
     }
+  };
+
+  const handleResetPlaylist = () => {
+    setPlaylistUrl("");
+    setPlaylistItems([]);
+    setPlaylistError(null);
+    setPlaylistStage("input");
+    setPlaylistLocked(false);
+    setLastFetchedPlaylistId(null);
+    setStatusText("已返回歌單挑選，可重新貼上新清單");
   };
 
   return (
@@ -393,12 +418,15 @@ const RoomChatPage: React.FC = () => {
             playlistItems={playlistItems}
             playlistError={playlistError}
             playlistLoading={playlistLoading}
+            playlistStage={playlistStage}
+            playlistLocked={playlistLocked}
             rooms={rooms}
             username={username}
             currentRoomId={currentRoomIdRef.current}
             onRoomNameChange={setRoomNameInput}
             onPlaylistUrlChange={setPlaylistUrl}
             onFetchPlaylist={handleFetchPlaylist}
+            onResetPlaylist={handleResetPlaylist}
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
           />

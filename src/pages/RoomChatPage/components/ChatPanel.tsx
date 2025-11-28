@@ -28,7 +28,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onSend,
 }) => {
   return (
-    <section className=" flex flex-col w-full border border-slate-700 rounded-xl p-4 bg-slate-900/60 backdrop-blur-sm min-h-[320px]">
+    <section className=" flex flex-col w-full border border-slate-700 rounded-xl p-4 bg-slate-900/60 backdrop-blur-sm min-h-[320px] transition-[transform,shadow] duration-300 hover:-translate-y-0.5 hover:shadow-slate-900/40">
       <div className="flex items-center justify-between mb-3 ">
         <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
           <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" />
@@ -102,7 +102,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 }`}
               >
                 <div
-                  className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm ${
+                  className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 ${
                     isSelf
                       ? "bg-sky-700 text-slate-50 rounded-br-sm"
                       : "bg-slate-700 text-slate-100 rounded-bl-sm"
