@@ -1,5 +1,5 @@
 import React from "react";
-import { PlaylistItem, RoomSummary } from "../types";
+import type { PlaylistItem, RoomSummary } from "../types";
 
 interface RoomCreationSectionProps {
   roomName: string;
@@ -53,33 +53,46 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             />
             <button
               onClick={onCreateRoom}
-              disabled={!username}
-              className="px-4 py-2 text-sm rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-sm shadow-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              disabled={!username || !roomName}
+              className="cursor-pointer px-4 py-2 text-sm rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-sm shadow-emerald-900/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               建立房間
             </button>
           </div>
 
           <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <p className="text-xs text-slate-300 font-semibold mb-1">插入 YouTube 播放清單</p>
-                <input
-                  className="w-full px-3 py-2 text-sm rounded-lg bg-slate-900 border border-slate-700 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/60"
-                  placeholder="貼上播放清單連結（例如 https://www.youtube.com/playlist?list=...）"
-                  value={playlistUrl}
-                  onChange={(e) => onPlaylistUrlChange(e.target.value)}
-                  disabled={!username}
-                />
+            {playlistItems.length === 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-xs text-slate-300 font-semibold mb-1">
+                    插入 YouTube 播放清單
+                  </p>
+                  <input
+                    className="w-full px-3 py-2 text-sm rounded-lg bg-slate-900 border border-slate-700 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/60"
+                    placeholder="貼上播放清單連結（例如 https://www.youtube.com/playlist?list=...）"
+                    value={playlistUrl}
+                    onChange={(e) => onPlaylistUrlChange(e.target.value)}
+                    disabled={!username}
+                  />
+                </div>
+                <button
+                  onClick={onFetchPlaylist}
+                  disabled={!username || !playlistUrl || playlistLoading}
+                  className="cursor-pointer whitespace-nowrap px-3 py-2 text-xs rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-medium shadow-sm shadow-sky-900/60 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {playlistLoading ? "載入中..." : "取得清單"}
+                </button>
               </div>
-              <button
-                onClick={onFetchPlaylist}
-                disabled={!username || !playlistUrl || playlistLoading}
-                className="whitespace-nowrap px-3 py-2 text-xs rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-medium shadow-sm shadow-sky-900/60 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {playlistLoading ? "載入中..." : "取得清單"}
-              </button>
-            </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => {}}
+                  className="cursor-pointer whitespace-nowrap px-3 py-2 text-xs rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium shadow-sm shadow-sky-900/60 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  返回
+                </button>
+              </>
+            )}
             {playlistError && (
               <p className="text-xs text-red-300">{playlistError}</p>
             )}
@@ -94,7 +107,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                       key={`${item.title}-${idx}`}
                       className="px-3 py-2 flex items-center justify-between gap-2"
                     >
-                      <div>
+                      <div className="text-left">
                         <p className="text-slate-100">{item.title}</p>
                         <p className="text-[11px] text-slate-400">
                           {item.uploader ?? "Unknown"}

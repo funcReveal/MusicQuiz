@@ -27,7 +27,7 @@ const UsernameStep: React.FC<UsernameStepProps> = ({
       />
       <button
         onClick={onConfirm}
-        className="px-4 py-2 text-sm rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-medium shadow-sm shadow-sky-900/60 transition-colors"
+        className="cursor-pointer px-4 py-2 text-sm rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-medium shadow-sm shadow-sky-900/60 transition-colors"
       >
         Confirm
       </button>

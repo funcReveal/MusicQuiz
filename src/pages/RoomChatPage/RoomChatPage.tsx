@@ -5,7 +5,7 @@ import ChatPanel from "./components/ChatPanel";
 import HeaderSection from "./components/HeaderSection";
 import RoomCreationSection from "./components/RoomCreationSection";
 import UsernameStep from "./components/UsernameStep";
-import {
+import type {
   Ack,
   ChatMessage,
   ClientSocket,
@@ -64,7 +64,7 @@ const RoomChatPage: React.FC = () => {
     s.on("connect", () => {
       setIsConnected(true);
       setStatusText("Connected to server");
-      s.emit("listRooms", (ack) => {
+      s.emit("listRooms", (ack: Ack<RoomSummary[]>) => {
         if (ack && ack.ok) {
           setRooms(ack.data);
         }
@@ -131,20 +131,24 @@ const RoomChatPage: React.FC = () => {
       return;
     }
 
-    s.emit("createRoom", { roomName: trimmed, username }, (ack: Ack<RoomState>) => {
-      if (!ack) return;
-      if (ack.ok) {
-        const state = ack.data;
-        setCurrentRoom(state.room);
-        setParticipants(state.participants);
-        setMessages(state.messages);
-        currentRoomIdRef.current = state.room.id;
-        setRoomNameInput("");
-        setStatusText(`房間建立成功：${state.room.name}`);
-      } else {
-        setStatusText(`建立房間失敗：${ack.error}`);
+    s.emit(
+      "createRoom",
+      { roomName: trimmed, username },
+      (ack: Ack<RoomState>) => {
+        if (!ack) return;
+        if (ack.ok) {
+          const state = ack.data;
+          setCurrentRoom(state.room);
+          setParticipants(state.participants);
+          setMessages(state.messages);
+          currentRoomIdRef.current = state.room.id;
+          setRoomNameInput("");
+          setStatusText(`房間建立成功：${state.room.name}`);
+        } else {
+          setStatusText(`建立房間失敗：${ack.error}`);
+        }
       }
-    });
+    );
   };
 
   const handleJoinRoom = (roomId: string) => {
@@ -196,12 +200,16 @@ const RoomChatPage: React.FC = () => {
     const trimmed = messageInput.trim();
     if (!trimmed) return;
 
-    s.emit("sendMessage", { roomId: currentRoom.id, content: trimmed }, (ack) => {
-      if (!ack) return;
-      if (!ack.ok) {
-        setStatusText(`訊息發送失敗：${ack.error}`);
+    s.emit(
+      "sendMessage",
+      { roomId: currentRoom.id, content: trimmed },
+      (ack) => {
+        if (!ack) return;
+        if (!ack.ok) {
+          setStatusText(`訊息發送失敗：${ack.error}`);
+        }
       }
-    });
+    );
 
     setMessageInput("");
   };
@@ -235,9 +243,9 @@ const RoomChatPage: React.FC = () => {
     const displaySeconds = totalSeconds % 60;
 
     if (displayHours > 0) {
-      return `${displayHours}:${displayMinutes.toString().padStart(2, "0")}:${displaySeconds
+      return `${displayHours}:${displayMinutes
         .toString()
-        .padStart(2, "0")}`;
+        .padStart(2, "0")}:${displaySeconds.toString().padStart(2, "0")}`;
     }
 
     return `${displayMinutes}:${displaySeconds.toString().padStart(2, "0")}`;
@@ -274,7 +282,9 @@ const RoomChatPage: React.FC = () => {
           params.set("pageToken", nextPageToken);
         }
 
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`);
+        const res = await fetch(
+          `https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`
+        );
         if (!res.ok) {
           throw new Error("無法取得播放清單，請稍後再試");
         }
@@ -291,7 +301,10 @@ const RoomChatPage: React.FC = () => {
         }>;
 
         const videoIds = playlistVideos
-          .map((item) => item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId)
+          .map(
+            (item) =>
+              item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId
+          )
           .filter((id): id is string => Boolean(id));
 
         const durationMap = new Map<string, string | undefined>();
@@ -302,26 +315,41 @@ const RoomChatPage: React.FC = () => {
             key: apiKey,
           });
 
-          const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videoParams.toString()}`);
+          const videoRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?${videoParams.toString()}`
+          );
           if (videoRes.ok) {
             const videoData = await videoRes.json();
-            (videoData.items as Array<{ id?: string; contentDetails?: { duration?: string } }> | undefined)?.forEach(
-              (video) => {
-                if (video.id) {
-                  durationMap.set(video.id, formatDuration(video.contentDetails?.duration));
-                }
+            (
+              videoData.items as
+                | Array<{ id?: string; contentDetails?: { duration?: string } }>
+                | undefined
+            )?.forEach((video) => {
+              if (video.id) {
+                durationMap.set(
+                  video.id,
+                  formatDuration(video.contentDetails?.duration)
+                );
               }
-            );
+            });
           }
         }
 
         items.push(
           ...playlistVideos.map((item) => {
-            const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId ?? "";
+            const videoId =
+              item.contentDetails?.videoId ??
+              item.snippet?.resourceId?.videoId ??
+              "";
             return {
               title: item.snippet?.title ?? "未命名影片",
-              url: videoId ? `https://www.youtube.com/watch?v=${videoId}&list=${playlistId}` : "",
-              uploader: item.snippet?.videoOwnerChannelTitle ?? item.snippet?.channelTitle ?? "",
+              url: videoId
+                ? `https://www.youtube.com/watch?v=${videoId}&list=${playlistId}`
+                : "",
+              uploader:
+                item.snippet?.videoOwnerChannelTitle ??
+                item.snippet?.channelTitle ??
+                "",
               duration: videoId ? durationMap.get(videoId) : undefined,
             } satisfies PlaylistItem;
           })
@@ -342,7 +370,7 @@ const RoomChatPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col w-95/100 space-y-4">
       <HeaderSection
         serverUrl={SERVER_URL}
         isConnected={isConnected}

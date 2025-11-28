@@ -1,5 +1,5 @@
 import React from "react";
-import { ChatMessage, RoomParticipant, RoomSummary } from "../types";
+import type { ChatMessage, RoomParticipant, RoomSummary } from "../types";
 
 const formatTime = (timestamp: number) => {
   const d = new Date(timestamp);
@@ -34,7 +34,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" />
           房間聊天
           {currentRoom ? (
-            <span className="ml-2 text-xs text-slate-400">– {currentRoom.name}</span>
+            <span className="ml-2 text-xs text-slate-400">
+              – {currentRoom.name}
+            </span>
           ) : null}
         </h2>
 
@@ -86,12 +88,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       <div className="flex-1 rounded-lg border border-slate-800 bg-slate-950/70 p-3 mb-3 overflow-y-auto space-y-2">
         {messages.length === 0 ? (
-          <div className="text-xs text-slate-500 text-center">目前沒有訊息，送出第一則訊息吧。</div>
+          <div className="text-xs text-slate-500 text-center">
+            目前沒有訊息，送出第一則訊息吧。
+          </div>
         ) : (
           messages.map((msg) => {
             const isSelf = msg.username === username;
             return (
-              <div key={msg.id} className={`flex text-xs ${isSelf ? "justify-end" : "justify-start"}`}>
+              <div
+                key={msg.id}
+                className={`flex text-xs ${
+                  isSelf ? "justify-end" : "justify-start"
+                }`}
+              >
                 <div
                   className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm ${
                     isSelf
@@ -104,9 +113,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                       {msg.username}
                       {isSelf && "（你）"}
                     </span>
-                    <span className="text-[10px] opacity-70">{formatTime(msg.timestamp)}</span>
+                    <span className="text-[10px] opacity-70">
+                      {formatTime(msg.timestamp)}
+                    </span>
                   </div>
-                  <div className="text-[12px] leading-snug text-left">{msg.content}</div>
+                  <div className="text-[12px] leading-snug text-left">
+                    {msg.content}
+                  </div>
                 </div>
               </div>
             );
