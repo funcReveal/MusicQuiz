@@ -220,6 +220,29 @@ const RoomChatPage: React.FC = () => {
     }
   };
 
+  const formatDuration = (iso8601: string | undefined) => {
+    if (!iso8601) return undefined;
+    const match = iso8601.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return undefined;
+
+    const hours = Number(match[1] ?? 0);
+    const minutes = Number(match[2] ?? 0);
+    const seconds = Number(match[3] ?? 0);
+    const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+
+    const displayHours = Math.floor(totalSeconds / 3600);
+    const displayMinutes = Math.floor((totalSeconds % 3600) / 60);
+    const displaySeconds = totalSeconds % 60;
+
+    if (displayHours > 0) {
+      return `${displayHours}:${displayMinutes.toString().padStart(2, "0")}:${displaySeconds
+        .toString()
+        .padStart(2, "0")}`;
+    }
+
+    return `${displayMinutes}:${displaySeconds.toString().padStart(2, "0")}`;
+  };
+
   const handleFetchPlaylist = async () => {
     setPlaylistError(null);
     const playlistId = extractPlaylistId(playlistUrl);
@@ -228,28 +251,85 @@ const RoomChatPage: React.FC = () => {
       return;
     }
 
+    const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined;
+    if (!apiKey) {
+      setPlaylistError("尚未設定 YouTube API 金鑰 (VITE_YOUTUBE_API_KEY)");
+      return;
+    }
+
     setPlaylistLoading(true);
     try {
-      const res = await fetch(`https://piped.video/api/v1/playlists/${playlistId}`);
-      if (!res.ok) {
-        throw new Error("無法取得播放清單，請稍後再試");
-      }
-      const data = await res.json();
-      type PipedPlaylistStream = {
-        title: string;
-        url?: string;
-        id?: string;
-        uploaderName?: string;
-        uploader?: string;
-        duration?: string;
-      };
+      const items: PlaylistItem[] = [];
+      let nextPageToken: string | undefined;
 
-      const items: PlaylistItem[] = (data.relatedStreams as PipedPlaylistStream[] | undefined)?.map((item) => ({
-        title: item.title,
-        url: `https://www.youtube.com/watch?v=${item.url ?? item.id ?? ""}&list=${playlistId}`,
-        uploader: item.uploaderName ?? item.uploader ?? "",
-        duration: item.duration ?? undefined,
-      })) ?? [];
+      do {
+        const params = new URLSearchParams({
+          part: "snippet,contentDetails",
+          maxResults: "50",
+          playlistId,
+          key: apiKey,
+        });
+
+        if (nextPageToken) {
+          params.set("pageToken", nextPageToken);
+        }
+
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error("無法取得播放清單，請稍後再試");
+        }
+
+        const data = await res.json();
+        const playlistVideos = (data.items ?? []) as Array<{
+          snippet?: {
+            title?: string;
+            channelTitle?: string;
+            videoOwnerChannelTitle?: string;
+            resourceId?: { videoId?: string };
+          };
+          contentDetails?: { videoId?: string };
+        }>;
+
+        const videoIds = playlistVideos
+          .map((item) => item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId)
+          .filter((id): id is string => Boolean(id));
+
+        const durationMap = new Map<string, string | undefined>();
+        if (videoIds.length > 0) {
+          const videoParams = new URLSearchParams({
+            part: "contentDetails",
+            id: videoIds.join(","),
+            key: apiKey,
+          });
+
+          const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videoParams.toString()}`);
+          if (videoRes.ok) {
+            const videoData = await videoRes.json();
+            (videoData.items as Array<{ id?: string; contentDetails?: { duration?: string } }> | undefined)?.forEach(
+              (video) => {
+                if (video.id) {
+                  durationMap.set(video.id, formatDuration(video.contentDetails?.duration));
+                }
+              }
+            );
+          }
+        }
+
+        items.push(
+          ...playlistVideos.map((item) => {
+            const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId ?? "";
+            return {
+              title: item.snippet?.title ?? "未命名影片",
+              url: videoId ? `https://www.youtube.com/watch?v=${videoId}&list=${playlistId}` : "",
+              uploader: item.snippet?.videoOwnerChannelTitle ?? item.snippet?.channelTitle ?? "",
+              duration: videoId ? durationMap.get(videoId) : undefined,
+            } satisfies PlaylistItem;
+          })
+        );
+
+        nextPageToken = data.nextPageToken;
+      } while (nextPageToken);
+
       setPlaylistItems(items);
       setStatusText(`已載入播放清單，共 ${items.length} 首歌曲`);
     } catch (error) {
