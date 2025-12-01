@@ -15,7 +15,7 @@ import type {
   RoomSummary,
 } from "./types";
 
-const SERVER_URL = "http://217.142.240.18:3000";
+const SERVER_URL = import.meta.env.VITE_SOCKET_URL;
 
 const RoomChatPage: React.FC = () => {
   const [usernameInput, setUsernameInput] = useState("");
