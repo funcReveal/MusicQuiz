@@ -642,6 +642,14 @@ const RoomChatPage: React.FC = () => {
     });
   };
 
+  // 遊戲結束自動回聊天室
+  useEffect(() => {
+    if (gameState?.status === "ended" && isGameView) {
+      setIsGameView(false);
+      setStatusText("遊戲已結束，返回聊天室");
+    }
+  }, [gameState?.status, isGameView]);
+
   const handleSubmitChoice = (choiceIndex: number) => {
     const s = getSocket();
     if (!s || !currentRoom || !gameState) return;
@@ -801,6 +809,36 @@ const RoomChatPage: React.FC = () => {
     playlistPageSize,
   ]);
 
+  // 遊戲模式：全屏顯示遊戲頁（保留 Header 以便退出/提示）
+  if (currentRoom && gameState && isGameView) {
+    return (
+      <div className="flex flex-col w-full min-h-screen space-y-4">
+        <HeaderSection
+          serverUrl={SERVER_URL}
+          isConnected={isConnected}
+          displayUsername={displayUsername}
+        />
+        <div className="flex w-full justify-center">
+          <GameRoomPage
+            room={currentRoom}
+            gameState={gameState}
+            playlist={gamePlaylist.length > 0 ? gamePlaylist : playlistViewItems}
+            onBack={() => setIsGameView(false)}
+            onSubmitChoice={handleSubmitChoice}
+            participants={participants}
+            meClientId={clientId}
+            messages={messages}
+            messageInput={messageInput}
+            onMessageChange={setMessageInput}
+            onSendMessage={handleSendMessage}
+            username={username}
+          />
+        </div>
+        {statusText && <Snackbar message={`Status: ${statusText}`} open={true} />}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col w-95/100 space-y-4">
       <HeaderSection
@@ -816,23 +854,6 @@ const RoomChatPage: React.FC = () => {
           onConfirm={handleSetUsername}
         />
       )}
-
-      {currentRoom && gameState && isGameView && (
-        <div className="flex w-full justify-center">
-          <GameRoomPage
-            room={currentRoom}
-            gameState={gameState}
-            playlist={
-              gamePlaylist.length > 0 ? gamePlaylist : playlistViewItems
-            }
-            onBack={() => setIsGameView(false)}
-            onSubmitChoice={handleSubmitChoice}
-            participants={participants}
-            meClientId={clientId}
-          />
-        </div>
-      )}
-
       <div className="flex gap-4 flex-row justify-center">
         {!currentRoom?.id && username && (
           <>
@@ -1019,10 +1040,7 @@ const RoomChatPage: React.FC = () => {
         onCreateRoom={handleCreateRoom}
       />
 
-      {statusText && (
-        // <div className="text-xs text-slate-400 mt-1">Status: {statusText}</div>
-        <Snackbar message={`Status: ${statusText}`} open={true} />
-      )}
+      {statusText && <Snackbar message={`Status: ${statusText}`} open={true} />}
     </div>
   );
 };
