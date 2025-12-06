@@ -56,6 +56,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const [showVideo, setShowVideo] = useState(gameState.showVideo ?? true);
   const [volume, setVolume] = useState(100);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
+  const [preheatVideoId, setPreheatVideoId] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const effectiveTrackOrder = useMemo(() => {
@@ -119,6 +120,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const isEnded = gameState.status === "ended";
   const isReveal = gameState.phase === "reveal";
   const correctChoiceIndex = currentTrackIndex;
+  const nextTrackIndex =
+    effectiveTrackOrder[Math.min(boundedCursor + 1, Math.max(trackOrderLength - 1, 0))];
+  const nextVideoId =
+    nextTrackIndex !== undefined && nextTrackIndex !== null
+      ? extractYouTubeId(playlist[nextTrackIndex]?.url ?? "")
+      : null;
 
   const iframeSrc = videoId
     ? `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&disablekb=1&start=${
@@ -152,6 +159,18 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       : topFive;
 
   const recentMessages = messages.slice(-80);
+
+  // 預熱下一首（在公布階段尾端先啟動下一首靜音播放，降低背景被擋的機率）
+  useEffect(() => {
+    if (isReveal && phaseRemainingMs < 2000 && nextVideoId && preheatVideoId !== nextVideoId) {
+      setPreheatVideoId(nextVideoId);
+    }
+  }, [isReveal, phaseRemainingMs, nextVideoId, preheatVideoId]);
+
+  // 切歌後清掉預熱狀態
+  useEffect(() => {
+    setPreheatVideoId(null);
+  }, [gameState.startedAt, boundedCursor]);
 
   return (
     <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-[400px_1fr] xl:grid-cols-[440px_1fr] lg:max-h-[calc(100vh-140px)]">
@@ -290,6 +309,14 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
               <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
                 暫時沒有可播放的影片來源
               </div>
+            )}
+            {preheatVideoId && (
+              <iframe
+                className="hidden"
+                src={`https://www.youtube.com/embed/${preheatVideoId}?autoplay=1&mute=1&controls=0&disablekb=1&playsinline=1&rel=0&modestbranding=1&fs=0`}
+                allow="autoplay; encrypted-media"
+                title="preheat-next-track"
+              />
             )}
             {gameState.phase === "guess" && !isEnded && (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
