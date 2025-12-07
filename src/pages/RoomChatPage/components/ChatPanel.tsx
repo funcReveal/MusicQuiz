@@ -89,21 +89,33 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const item = playlistItems[index];
     return (
       <Box style={style} {...ariaAttributes} px={0.5}>
-        <Card variant="outlined" className="bg-slate-900/70 border-slate-800">
+        <Card
+          sx={{ width: "99%" }}
+          variant="outlined"
+          className="bg-slate-900/70 border-slate-800"
+        >
           <ListItem dense>
             <ListItemAvatar>
-              <Avatar sx={{ bgcolor: "#334155", width: 36, height: 36 }}>
+              <Avatar
+                sx={{ bgcolor: "#334155", width: 56, height: 56, fontSize: 14 }}
+                variant="rounded"
+                src={item.thumbnail}
+              >
                 {index + 1}
               </Avatar>
             </ListItemAvatar>
             <ListItemText
               primary={
-                <Typography variant="body2">
+                <Typography
+                  variant="body2"
+                  className="max-w-99/100 truncate text-slate-400"
+                >
                   <a
-                    className="w-auto text-slate-100 hover:text-sky-400 transition-colors duration-300"
+                    className=" text-slate-100 hover:text-sky-400 transition-colors duration-300"
                     href={item.url}
                     target="_blank"
                     rel="noreferrer"
+                    title={item.title}
                   >
                     {item.title}
                   </a>
@@ -135,7 +147,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   return (
     <Card
       variant="outlined"
-      className="w-full lg:w-2/5 bg-slate-900/70 border-slate-700 text-slate-50"
+      className="w-full lg:w-4/5 bg-slate-900/70 border-slate-700 text-slate-50"
       sx={{ maxHeight: 760, display: "flex", flexDirection: "column" }}
     >
       <CardHeader
@@ -380,10 +392,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </Typography>
           ) : (
             <VirtualList
-              style={{ height: 260, width: "100%" }}
+              style={{ height: 280, width: "100%" }}
               rowCount={rowCount}
               rowProps={{}}
-              rowHeight={82}
+              rowHeight={96}
               rowComponent={PlaylistRow}
             />
           )}

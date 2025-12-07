@@ -4,7 +4,6 @@ import { io } from "socket.io-client";
 import ChatPanel from "./components/ChatPanel";
 import HeaderSection from "./components/HeaderSection";
 import RoomCreationSection from "./components/RoomCreationSection";
-import CreateRoomDialog from "./components/CreateRoomDialog";
 import UsernameStep from "./components/UsernameStep";
 import type {
   Ack,
@@ -84,7 +83,7 @@ const RoomChatPage: React.FC = () => {
   });
   const isInviteMode = Boolean(inviteRoomId);
   const [inviteNotFound, setInviteNotFound] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "create">("list");
 
   const socketRef = useRef<ClientSocket | null>(null);
   const currentRoomIdRef = useRef<string | null>(
@@ -287,6 +286,9 @@ const RoomChatPage: React.FC = () => {
 
     s.on("roomsUpdated", (updatedRooms: RoomSummary[]) => {
       setRooms(updatedRooms);
+      if (!currentRoom && viewMode === "list") {
+        // keep list visible
+      }
       if (isInviteMode && inviteRoomId) {
         const found = updatedRooms.some((r) => r.id === inviteRoomId);
         setInviteNotFound(!found);
@@ -404,7 +406,6 @@ const RoomChatPage: React.FC = () => {
         setMessages(state.messages);
         persistRoomId(state.room.id);
         setRoomNameInput("");
-        setCreateDialogOpen(false);
         setStatusText(`已建立房間：${state.room.name}`);
         setPlaylistProgress({
           received: state.room.playlist.receivedCount,
@@ -568,6 +569,10 @@ const RoomChatPage: React.FC = () => {
             channelTitle?: string;
             videoOwnerChannelTitle?: string;
             resourceId?: { videoId?: string };
+            thumbnails?: Record<
+              string,
+              { url?: string; width?: number; height?: number }
+            >;
           };
           contentDetails?: { videoId?: string };
         }>;
@@ -613,6 +618,13 @@ const RoomChatPage: React.FC = () => {
               item.contentDetails?.videoId ??
               item.snippet?.resourceId?.videoId ??
               "";
+            const thumb =
+              item.snippet?.thumbnails?.maxres?.url ??
+              item.snippet?.thumbnails?.standard?.url ??
+              item.snippet?.thumbnails?.high?.url ??
+              item.snippet?.thumbnails?.medium?.url ??
+              item.snippet?.thumbnails?.default?.url ??
+              undefined;
             return {
               title: item.snippet?.title ?? "未命名影片",
               url: videoId
@@ -623,6 +635,7 @@ const RoomChatPage: React.FC = () => {
                 item.snippet?.channelTitle ??
                 "",
               duration: videoId ? durationMap.get(videoId) : undefined,
+              thumbnail: thumb,
             } satisfies PlaylistItem;
           })
         );
@@ -706,7 +719,7 @@ const RoomChatPage: React.FC = () => {
                     : null
                 }
                 inviteRoomId={inviteRoomId}
-                isInviteMode={isInviteMode}
+                isInviteMode={true}
                 inviteNotFound={inviteNotFound}
                 questionCount={questionCount}
                 onQuestionCountChange={setQuestionCount}
@@ -718,7 +731,53 @@ const RoomChatPage: React.FC = () => {
                 onResetPlaylist={handleResetPlaylist}
                 onCreateRoom={handleCreateRoom}
                 onJoinRoom={handleJoinRoom}
+                showRoomList={false}
               />
+            ) : viewMode === "create" ? (
+              <div className="w-full md:w-full lg:w-3/5">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg text-slate-100 font-semibold">
+                    建立房間
+                  </h2>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setViewMode("list")}
+                  >
+                    返回列表
+                  </Button>
+                </div>
+                <RoomCreationSection
+                  roomName={roomNameInput}
+                  roomPassword={roomPasswordInput}
+                  playlistUrl={playlistUrl}
+                  playlistItems={playlistItems}
+                  playlistError={playlistError}
+                  playlistLoading={playlistLoading}
+                  playlistStage={playlistStage}
+                  playlistLocked={playlistLocked}
+                  rooms={[]}
+                  username={username}
+                  currentRoomId={currentRoomIdRef.current}
+                  joinPassword={joinPasswordInput}
+                  playlistProgress={playlistProgress}
+                  inviteRoom={null}
+                  inviteRoomId={null}
+                  isInviteMode={false}
+                  inviteNotFound={false}
+                  questionCount={questionCount}
+                  onQuestionCountChange={setQuestionCount}
+                  onRoomNameChange={setRoomNameInput}
+                  onRoomPasswordChange={setRoomPasswordInput}
+                  onJoinPasswordChange={setJoinPasswordInput}
+                  onPlaylistUrlChange={setPlaylistUrl}
+                  onFetchPlaylist={handleFetchPlaylist}
+                  onResetPlaylist={handleResetPlaylist}
+                  onCreateRoom={handleCreateRoom}
+                  onJoinRoom={handleJoinRoom}
+                  showRoomList={false}
+                />
+              </div>
             ) : (
               <div className="w-full md:w-full lg:w-3/5">
                 <div className="flex items-center justify-between mb-2">
@@ -727,14 +786,15 @@ const RoomChatPage: React.FC = () => {
                   </h2>
                   <Button
                     variant="contained"
-                    onClick={() => setCreateDialogOpen(true)}
+                    size="small"
+                    onClick={() => setViewMode("create")}
                   >
                     建立房間
                   </Button>
                 </div>
                 <div className="w-full max-h-80 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/70 divide-y divide-slate-800 shadow-inner shadow-slate-900/60">
                   {rooms.length === 0 ? (
-                    <div className="p-4 text-xs text-slate-500 text-center">
+                    <div className="flex items-center justify-center min-h-40 text-xl text-slate-300">
                       目前沒有房間，試著建立一個吧！
                     </div>
                   ) : (
@@ -828,41 +888,17 @@ const RoomChatPage: React.FC = () => {
                 try {
                   await navigator.clipboard.writeText(inviteText);
                   setStatusText("已複製邀請連結");
-                  // return true;
                 } catch (err) {
                   console.error(err);
                   setStatusText("複製邀請連結失敗");
-                  // return false;
                 }
               } else {
                 setStatusText(inviteText);
-                // return true;
               }
             }}
           />
         )}
       </div>
-
-      <CreateRoomDialog
-        open={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
-        roomName={roomNameInput}
-        roomPassword={roomPasswordInput}
-        questionCount={questionCount}
-        playlistUrl={playlistUrl}
-        playlistItems={playlistItems}
-        playlistError={playlistError}
-        playlistLoading={playlistLoading}
-        playlistStage={playlistStage}
-        playlistLocked={playlistLocked}
-        onRoomNameChange={setRoomNameInput}
-        onRoomPasswordChange={setRoomPasswordInput}
-        onQuestionCountChange={setQuestionCount}
-        onPlaylistUrlChange={setPlaylistUrl}
-        onFetchPlaylist={handleFetchPlaylist}
-        onResetPlaylist={handleResetPlaylist}
-        onCreateRoom={handleCreateRoom}
-      />
 
       {statusText && (
         // <div className="text-xs text-slate-400 mt-1">Status: {statusText}</div>
