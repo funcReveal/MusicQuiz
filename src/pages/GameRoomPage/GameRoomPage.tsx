@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Chip, LinearProgress, Switch } from "@mui/material";
 import type {
   ChatMessage,
@@ -49,15 +49,37 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   onSendMessage,
   username,
 }) => {
+  const [volume, setVolume] = useState(() => {
+    const stored = Number(localStorage.getItem("mq_volume"));
+    return Number.isFinite(stored) ? Math.min(100, Math.max(0, stored)) : 100;
+  });
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [playerStart, setPlayerStart] = useState(() =>
     Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000))
   );
   const [showVideo, setShowVideo] = useState(gameState.showVideo ?? true);
-  const [volume, setVolume] = useState(100);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [preheatVideoId, setPreheatVideoId] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const hasStartedPlaybackRef = useRef(false);
+
+  const applyVolume = useCallback((val: number) => {
+    const target = iframeRef.current?.contentWindow;
+    if (!target) return;
+    const safeVolume = Math.min(100, Math.max(0, val));
+    try {
+      target.postMessage(
+        JSON.stringify({
+          event: "command",
+          func: "setVolume",
+          args: [safeVolume],
+        }),
+        "*"
+      );
+    } catch (err) {
+      console.error("setVolume failed", err);
+    }
+  }, []);
 
   const effectiveTrackOrder = useMemo(() => {
     if (gameState.trackOrder?.length) {
@@ -74,36 +96,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     effectiveTrackOrder[boundedCursor] ??
     effectiveTrackOrder[0] ??
     0;
-
-  useEffect(() => {
-    setPlayerStart(
-      Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000))
-    );
-    setSelectedChoice(null);
-    const interval = setInterval(() => setNowMs(Date.now()), 500);
-    return () => clearInterval(interval);
-  }, [gameState.startedAt, gameState.currentIndex, currentTrackIndex]);
-
-  useEffect(() => {
-    setShowVideo(gameState.showVideo ?? true);
-  }, [gameState.showVideo]);
-
-  useEffect(() => {
-    const target = iframeRef.current?.contentWindow;
-    if (!target) return;
-    try {
-      target.postMessage(
-        JSON.stringify({
-          event: "command",
-          func: "setVolume",
-          args: [volume],
-        }),
-        "*"
-      );
-    } catch (err) {
-      console.error("setVolume failed", err);
-    }
-  }, [volume]);
+  const waitingToStart = gameState.startedAt > nowMs;
 
   const item = useMemo(() => {
     return playlist[currentTrackIndex] ?? playlist[0];
@@ -114,7 +107,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     gameState.phase === "guess"
       ? gameState.startedAt + gameState.guessDurationMs
       : gameState.revealEndsAt;
-  const waitingToStart = gameState.startedAt > nowMs;
   const phaseRemainingMs = Math.max(0, phaseEndsAt - nowMs);
   const revealCountdownMs = Math.max(0, gameState.revealEndsAt - nowMs);
   const isEnded = gameState.status === "ended";
@@ -127,10 +119,110 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       ? extractYouTubeId(playlist[nextTrackIndex]?.url ?? "")
       : null;
 
+  useEffect(() => {
+    setPlayerStart(
+      Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000))
+    );
+    setSelectedChoice(null);
+    hasStartedPlaybackRef.current = false;
+    const interval = setInterval(() => setNowMs(Date.now()), 500);
+    return () => clearInterval(interval);
+  }, [gameState.startedAt, gameState.currentIndex, currentTrackIndex]);
+
+  useEffect(() => {
+    setShowVideo(gameState.showVideo ?? true);
+  }, [gameState.showVideo]);
+
+  useEffect(() => {
+    applyVolume(volume);
+    localStorage.setItem("mq_volume", String(volume));
+  }, [applyVolume, volume]);
+
+  // Ensure volume is re-applied when the iframe is recreated for a new track.
+  useEffect(() => {
+    applyVolume(volume);
+  }, [applyVolume, currentTrackIndex, gameState.startedAt]);
+
+  // Override media session to avoid exposing track info and disable remote controls/progress.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof MediaMetadata === "undefined") return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "Music Quiz",
+        artist: isReveal ? "Reveal phase" : "Guess the song",
+        album: "Now playing",
+      });
+      const noop = () => {};
+      const actions: Array<MediaSessionAction> = [
+        "play",
+        "pause",
+        "stop",
+        "seekbackward",
+        "seekforward",
+        "seekto",
+        "previoustrack",
+        "nexttrack",
+      ];
+      actions.forEach((action) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, noop);
+        } catch {
+          /* ignore unsupported actions */
+        }
+      });
+      navigator.mediaSession.playbackState = waitingToStart || isEnded ? "paused" : "playing";
+      navigator.mediaSession.setPositionState?.({
+        duration: 0,
+        position: 0,
+        playbackRate: 0,
+      });
+    } catch (err) {
+      console.error("mediaSession setup failed", err);
+    }
+  }, [isReveal, waitingToStart, isEnded, currentTrackIndex]);
+
+  // Stop audio during countdown and start exactly when countdown finishes.
+  useEffect(() => {
+    const target = iframeRef.current?.contentWindow;
+    if (!target) return;
+
+    if (waitingToStart) {
+      hasStartedPlaybackRef.current = false;
+      try {
+        target.postMessage(
+          JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+          "*"
+        );
+        target.postMessage(
+          JSON.stringify({ event: "command", func: "seekTo", args: [0, true] }),
+          "*"
+        );
+      } catch (err) {
+        console.error("pause before start failed", err);
+      }
+      return;
+    }
+
+    if (hasStartedPlaybackRef.current) return;
+    try {
+      target.postMessage(
+        JSON.stringify({ event: "command", func: "seekTo", args: [playerStart, true] }),
+        "*"
+      );
+      target.postMessage(
+        JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+        "*"
+      );
+      applyVolume(volume);
+      hasStartedPlaybackRef.current = true;
+    } catch (err) {
+      console.error("start playback failed", err);
+    }
+  }, [applyVolume, playerStart, waitingToStart, volume]);
+
   const iframeSrc = videoId
-    ? `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&disablekb=1&start=${
-        waitingToStart ? 0 : playerStart
-      }&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
+    ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${waitingToStart ? 0 : 1}&controls=0&disablekb=1&start=${waitingToStart ? 0 : playerStart}&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
     : null;
 
   const phaseLabel = isEnded
@@ -300,10 +392,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                   gameState.phase === "guess" || !showVideo ? "opacity-0" : "opacity-100"
                 }`}
                 allow="autoplay; encrypted-media"
+                controlsList="nodownload noremoteplayback"
                 allowFullScreen
                 title="Now playing"
                 style={{ pointerEvents: "none" }}
                 ref={iframeRef}
+                onLoad={() => applyVolume(volume)}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
@@ -313,8 +407,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
             {preheatVideoId && (
               <iframe
                 className="hidden"
-                src={`https://www.youtube.com/embed/${preheatVideoId}?autoplay=1&mute=1&controls=0&disablekb=1&playsinline=1&rel=0&modestbranding=1&fs=0`}
+                src={`https://www.youtube-nocookie.com/embed/${preheatVideoId}?autoplay=1&mute=1&controls=0&disablekb=1&playsinline=1&rel=0&modestbranding=1&fs=0`}
                 allow="autoplay; encrypted-media"
+                controlsList="nodownload noremoteplayback"
                 title="preheat-next-track"
               />
             )}
