@@ -62,6 +62,22 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const [preheatVideoId, setPreheatVideoId] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hasStartedPlaybackRef = useRef(false);
+  const playerReadyRef = useRef(false);
+  const lastSyncMsRef = useRef<number>(Date.now());
+  const initialVideoIdRef = useRef<string | null>(null);
+  const initialIframeSrcRef = useRef<string | null>(null);
+  const lastTrackLoadKeyRef = useRef<string | null>(null);
+  const lastLoadedVideoIdRef = useRef<string | null>(null);
+  const PLAYER_ID = "mq-main-player";
+  const DRIFT_TOLERANCE_SEC = 1;
+  const computeServerPositionSec = useCallback(
+    () => Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000)),
+    [gameState.startedAt]
+  );
+  const getEstimatedLocalPositionSec = useCallback(() => {
+    const elapsed = (Date.now() - lastSyncMsRef.current) / 1000;
+    return Math.max(0, playerStart + elapsed);
+  }, [playerStart]);
 
   const applyVolume = useCallback((val: number) => {
     const target = iframeRef.current?.contentWindow;
@@ -103,6 +119,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   }, [playlist, currentTrackIndex]);
 
   const videoId = item ? extractYouTubeId(item.url) : null;
+  if (!initialVideoIdRef.current && videoId) {
+    initialVideoIdRef.current = videoId;
+    initialIframeSrcRef.current = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`;
+  }
   const phaseEndsAt =
     gameState.phase === "guess"
       ? gameState.startedAt + gameState.guessDurationMs
@@ -118,16 +138,81 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     nextTrackIndex !== undefined && nextTrackIndex !== null
       ? extractYouTubeId(playlist[nextTrackIndex]?.url ?? "")
       : null;
+  const trackLoadKey = `${videoId ?? "none"}-${gameState.startedAt}`;
+
+  const postCommand = useCallback((func: string, args: unknown[] = []) => {
+    const target = iframeRef.current?.contentWindow;
+    if (!target) return;
+    try {
+      target.postMessage(
+        JSON.stringify({
+          event: "command",
+          func,
+          args,
+          id: PLAYER_ID,
+        }),
+        "*"
+      );
+    } catch (err) {
+      console.error(`${func} failed`, err);
+    }
+  }, []);
+
+  const loadTrack = useCallback(
+    (id: string, startSeconds: number, autoplay: boolean) => {
+      postCommand(autoplay ? "loadVideoById" : "cueVideoById", [
+        { videoId: id, startSeconds },
+      ]);
+      lastLoadedVideoIdRef.current = id;
+      lastSyncMsRef.current = Date.now();
+      if (!autoplay) {
+        postCommand("pauseVideo");
+        postCommand("seekTo", [startSeconds, true]);
+      }
+    },
+    [postCommand]
+  );
+
+  const startPlayback = useCallback(
+    (forcedPosition?: number) => {
+      if (waitingToStart) return;
+      const startPos = forcedPosition ?? computeServerPositionSec();
+
+      setPlayerStart((prev) => (Math.abs(prev - startPos) > 0.01 ? startPos : prev));
+      lastSyncMsRef.current = Date.now();
+
+      postCommand("seekTo", [startPos, true]);
+      postCommand("playVideo");
+      applyVolume(volume);
+    },
+    [applyVolume, computeServerPositionSec, postCommand, volume, waitingToStart]
+  );
+
+  const resyncPlaybackToServerTime = useCallback(() => {
+    if (waitingToStart || isEnded) return;
+    const serverPos = computeServerPositionSec();
+    const localPos = getEstimatedLocalPositionSec();
+    const drift = Math.abs(serverPos - localPos);
+    if (drift <= DRIFT_TOLERANCE_SEC) return;
+    setPlayerStart(serverPos);
+    lastSyncMsRef.current = Date.now();
+    startPlayback(serverPos);
+  }, [
+    DRIFT_TOLERANCE_SEC,
+    computeServerPositionSec,
+    getEstimatedLocalPositionSec,
+    isEnded,
+    startPlayback,
+    waitingToStart,
+  ]);
 
   useEffect(() => {
-    setPlayerStart(
-      Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000))
-    );
+    setPlayerStart(computeServerPositionSec());
     setSelectedChoice(null);
     hasStartedPlaybackRef.current = false;
     const interval = setInterval(() => setNowMs(Date.now()), 500);
     return () => clearInterval(interval);
-  }, [gameState.startedAt, gameState.currentIndex, currentTrackIndex]);
+  }, [computeServerPositionSec, gameState.startedAt, gameState.currentIndex, currentTrackIndex]);
 
   useEffect(() => {
     setShowVideo(gameState.showVideo ?? true);
@@ -182,48 +267,106 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     }
   }, [isReveal, waitingToStart, isEnded, currentTrackIndex]);
 
+  // Listen for YouTube player readiness/state.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const origin = event.origin || "";
+      const isYouTube =
+        origin.includes("youtube.com") || origin.includes("youtube-nocookie.com");
+      if (!isYouTube || typeof event.data !== "string") return;
+
+      let data: { event?: string; info?: number; id?: string };
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (data.id && data.id !== PLAYER_ID) return;
+
+      if (data.event === "onReady") {
+        playerReadyRef.current = true;
+        const currentId = videoId ?? initialVideoIdRef.current;
+        if (currentId) {
+          const startSec = waitingToStart ? 0 : computeServerPositionSec();
+          setPlayerStart(startSec);
+          loadTrack(currentId, startSec, !waitingToStart);
+          lastTrackLoadKeyRef.current = `${currentId}-${gameState.startedAt}`;
+          if (!waitingToStart) {
+            startPlayback(startSec);
+          }
+        }
+      }
+
+      if (data.event === "onStateChange" && data.info === 1) {
+        hasStartedPlaybackRef.current = true;
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [
+    computeServerPositionSec,
+    gameState.startedAt,
+    loadTrack,
+    startPlayback,
+    videoId,
+    waitingToStart,
+  ]);
+
+  // Load track when cursor changes without recreating iframe.
+  useEffect(() => {
+    if (!videoId) return;
+    if (!playerReadyRef.current) return;
+    if (lastTrackLoadKeyRef.current === trackLoadKey) return;
+
+    const autoplay = !waitingToStart;
+    const startSec = autoplay ? computeServerPositionSec() : 0;
+    setPlayerStart(startSec);
+    loadTrack(videoId, startSec, autoplay);
+    hasStartedPlaybackRef.current = false;
+    lastTrackLoadKeyRef.current = trackLoadKey;
+    if (autoplay) {
+      startPlayback(startSec);
+    }
+  }, [
+    computeServerPositionSec,
+    loadTrack,
+    startPlayback,
+    trackLoadKey,
+    videoId,
+    waitingToStart,
+  ]);
+
   // Stop audio during countdown and start exactly when countdown finishes.
   useEffect(() => {
-    const target = iframeRef.current?.contentWindow;
-    if (!target) return;
-
     if (waitingToStart) {
       hasStartedPlaybackRef.current = false;
-      try {
-        target.postMessage(
-          JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
-          "*"
-        );
-        target.postMessage(
-          JSON.stringify({ event: "command", func: "seekTo", args: [0, true] }),
-          "*"
-        );
-      } catch (err) {
-        console.error("pause before start failed", err);
-      }
+      postCommand("pauseVideo");
+      postCommand("seekTo", [0, true]);
       return;
     }
 
-    if (hasStartedPlaybackRef.current) return;
-    try {
-      target.postMessage(
-        JSON.stringify({ event: "command", func: "seekTo", args: [playerStart, true] }),
-        "*"
-      );
-      target.postMessage(
-        JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-        "*"
-      );
-      applyVolume(volume);
-      hasStartedPlaybackRef.current = true;
-    } catch (err) {
-      console.error("start playback failed", err);
-    }
-  }, [applyVolume, playerStart, waitingToStart, volume]);
+    if (hasStartedPlaybackRef.current || !playerReadyRef.current) return;
+    startPlayback();
+  }, [postCommand, startPlayback, waitingToStart]);
 
-  const iframeSrc = videoId
-    ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${waitingToStart ? 0 : 1}&controls=0&disablekb=1&start=${waitingToStart ? 0 : playerStart}&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
-    : null;
+  // When returning from background, re-seek to server time if drifted.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        resyncPlaybackToServerTime();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [resyncPlaybackToServerTime]);
+
+  const iframeSrc =
+    initialIframeSrcRef.current ||
+    (videoId
+      ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
+      : null);
 
   const phaseLabel = isEnded
     ? "已結束"
@@ -386,7 +529,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           <div className="relative w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-inner h-[220px] sm:h-[280px] md:h-[320px] xl:h-[340px]">
             {iframeSrc ? (
               <iframe
-                key={`${currentTrackIndex}-${gameState.startedAt}`}
                 src={iframeSrc}
                 className={`h-full w-full object-contain transition-opacity duration-300 ${
                   gameState.phase === "guess" || !showVideo ? "opacity-0" : "opacity-100"
@@ -397,7 +539,20 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 title="Now playing"
                 style={{ pointerEvents: "none" }}
                 ref={iframeRef}
-                onLoad={() => applyVolume(volume)}
+                onLoad={() => {
+                  const target = iframeRef.current?.contentWindow;
+                  if (target) {
+                    try {
+                      target.postMessage(
+                        JSON.stringify({ event: "listening", id: PLAYER_ID }),
+                        "*"
+                      );
+                    } catch (err) {
+                      console.error("player event binding failed", err);
+                    }
+                  }
+                  applyVolume(volume);
+                }}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
