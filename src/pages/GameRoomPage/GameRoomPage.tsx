@@ -122,6 +122,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     effectiveTrackOrder[0] ??
     0;
   const waitingToStart = gameState.startedAt > nowMs;
+  const lockedCount = gameState.lockedClientIds?.length ?? 0;
+  const lockedOrder = gameState.lockedOrder ?? [];
 
   const item = useMemo(() => {
     return playlist[currentTrackIndex] ?? playlist[0];
@@ -455,6 +457,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           <span className="inline-block h-1.5 w-6 rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" />
           <span className="text-sm font-semibold">分數榜</span>
           <span className="text-[11px] text-slate-400">(前五名 + 自己)</span>
+          <Chip
+            label={`已答 ${lockedCount}/${participants.length || 0}`}
+            size="small"
+            color="success"
+            variant="outlined"
+            className="ml-auto"
+          />
         </div>
         <div className="space-y-2">
           {scoreboardList.length === 0 ? (
@@ -463,18 +472,35 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
             scoreboardList.map((p, idx) => (
               <div
                 key={p.clientId}
-                className={`flex items-center justify-between rounded px-2 py-1 text-sm ${p.clientId === meClientId
-                  ? "border border-emerald-600/50 bg-emerald-900/40 text-emerald-100"
-                  : "bg-slate-800/40 text-slate-200"
-                  }`}
+                className={`flex items-center justify-between rounded px-2 py-1 text-sm ${
+                  gameState.lockedClientIds?.includes(p.clientId)
+                    ? "border border-emerald-500/50 bg-emerald-900/40 text-emerald-50"
+                    : "bg-slate-800/40 text-slate-200"
+                } ${p.clientId === meClientId ? "ring-1 ring-emerald-400/70" : ""
+                }`}
               >
-                <span className="truncate">
+                <span className="truncate flex items-center gap-2">
+                  {gameState.lockedClientIds?.includes(p.clientId) && (
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" title="已選答案" />
+                  )}
                   {idx + 1}. {p.clientId === meClientId ? `${p.username}（我）` : p.username}
                 </span>
-                <span className="font-semibold text-emerald-300">
-                  {p.score}
-                  {p.combo > 1 && <span className="ml-1 text-amber-300">x{p.combo}</span>}
-                </span>
+                <div className="flex items-center gap-2">
+                  {gameState.lockedClientIds?.includes(p.clientId) ? (
+                    <Chip
+                      label={`第${(lockedOrder.indexOf(p.clientId) + 1) || "?"}答`}
+                      size="small"
+                      color="success"
+                      variant="filled"
+                    />
+                  ) : (
+                    <Chip label="未答" size="small" variant="outlined" />
+                  )}
+                  <span className="font-semibold text-emerald-300">
+                    {p.score}
+                    {p.combo > 1 && <span className="ml-1 text-amber-300">x{p.combo}</span>}
+                  </span>
+                </div>
               </div>
             ))
           )}

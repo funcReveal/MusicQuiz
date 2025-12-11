@@ -345,7 +345,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                           {formatTime(msg.timestamp)}
                         </Typography>
                       </Stack>
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}
+                      >
                         {msg.content}
                       </Typography>
                     </Box>

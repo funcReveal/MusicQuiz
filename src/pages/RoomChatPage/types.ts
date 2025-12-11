@@ -39,6 +39,8 @@ export interface GameState {
   showVideo: boolean;
   trackOrder: number[];
   trackCursor: number;
+  lockedClientIds?: string[];
+  lockedOrder?: string[];
 }
 
 export interface RoomParticipant {
