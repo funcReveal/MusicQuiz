@@ -39,6 +39,8 @@ export interface GameState {
   showVideo: boolean;
   trackOrder: number[];
   trackCursor: number;
+  lockedClientIds?: string[];
+  lockedOrder?: string[];
 }
 
 export interface RoomParticipant {
@@ -81,6 +83,7 @@ export interface RoomState {
   participants: RoomParticipant[];
   messages: ChatMessage[];
   gameState?: GameState | null;
+  serverNow: number;
 }
 
 // Client -> Server
@@ -141,7 +144,7 @@ export interface ClientToServerEvents {
   ) => void;
   startGame: (
     payload: { roomId: string },
-    callback?: (ack: Ack<GameState>) => void
+    callback?: (ack: Ack<{ gameState: GameState; serverNow: number }>) => void
   ) => void;
   submitAnswer: (
     payload: { roomId: string; choiceIndex: number },
@@ -167,7 +170,8 @@ export interface ServerToClientEvents {
   playlistUpdated: (payload: { roomId: string; playlist: PlaylistState }) => void;
   userLeft: (payload: { roomId: string; clientId: string }) => void;
   messageAdded: (payload: { roomId: string; message: ChatMessage }) => void;
-  gameStarted: (payload: { roomId: string; gameState: GameState }) => void;
+  gameStarted: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
+  gameUpdated: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
 }
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;

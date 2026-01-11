@@ -12,6 +12,9 @@ import type {
   PlaylistItem,
   RoomState,
 } from "../RoomChatPage/types";
+import KeyBindingSettings, {
+  useKeyBindings,
+} from "../Setting/components/KeyBindingSettings";
 
 interface GameRoomPageProps {
   room: RoomState["room"];
@@ -26,6 +29,7 @@ interface GameRoomPageProps {
   onMessageChange?: (value: string) => void;
   onSendMessage?: () => void;
   username?: string | null;
+  serverOffsetMs?: number;
 }
 
 const extractYouTubeId = (url: string): string | null => {
@@ -54,36 +58,49 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   onMessageChange,
   onSendMessage,
   username,
+  serverOffsetMs = 0,
 }) => {
   const [volume, setVolume] = useState(() => {
     const stored = Number(localStorage.getItem("mq_volume"));
     return Number.isFinite(stored) ? Math.min(100, Math.max(0, stored)) : 100;
   });
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now() + serverOffsetMs);
   const [playerStart, setPlayerStart] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000))
+    Math.max(
+      0,
+      Math.floor((Date.now() + serverOffsetMs - gameState.startedAt) / 1000)
+    )
   );
   const [showVideo, setShowVideo] = useState(gameState.showVideo ?? true);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [preheatVideoId, setPreheatVideoId] = useState<string | null>(null);
+  const [isTrackLoading, setIsTrackLoading] = useState(true);
+  const { keyBindings, setKeyBindings } = useKeyBindings();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hasStartedPlaybackRef = useRef(false);
   const playerReadyRef = useRef(false);
-  const lastSyncMsRef = useRef<number>(Date.now());
+  const lastSyncMsRef = useRef<number>(Date.now() + serverOffsetMs);
   const initialVideoIdRef = useRef<string | null>(null);
   const initialIframeSrcRef = useRef<string | null>(null);
   const lastTrackLoadKeyRef = useRef<string | null>(null);
   const lastLoadedVideoIdRef = useRef<string | null>(null);
+  const lastTrackSessionRef = useRef<string | null>(null);
+  const lastPassiveResumeRef = useRef<number>(0);
   const PLAYER_ID = "mq-main-player";
   const DRIFT_TOLERANCE_SEC = 1;
+  const getServerNowMs = useCallback(
+    () => Date.now() + serverOffsetMs,
+    [serverOffsetMs]
+  );
   const computeServerPositionSec = useCallback(
-    () => Math.max(0, Math.floor((Date.now() - gameState.startedAt) / 1000)),
-    [gameState.startedAt]
+    () =>
+      Math.max(0, Math.floor((getServerNowMs() - gameState.startedAt) / 1000)),
+    [gameState.startedAt, getServerNowMs]
   );
   const getEstimatedLocalPositionSec = useCallback(() => {
-    const elapsed = (Date.now() - lastSyncMsRef.current) / 1000;
+    const elapsed = (getServerNowMs() - lastSyncMsRef.current) / 1000;
     return Math.max(0, playerStart + elapsed);
-  }, [playerStart]);
+  }, [getServerNowMs, playerStart]);
 
   const applyVolume = useCallback((val: number) => {
     const target = iframeRef.current?.contentWindow;
@@ -122,6 +139,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     effectiveTrackOrder[0] ??
     0;
   const waitingToStart = gameState.startedAt > nowMs;
+  const lockedCount = gameState.lockedClientIds?.length ?? 0;
+  const lockedOrder = gameState.lockedOrder ?? [];
 
   const item = useMemo(() => {
     return playlist[currentTrackIndex] ?? playlist[0];
@@ -149,7 +168,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     nextTrackIndex !== undefined && nextTrackIndex !== null
       ? extractYouTubeId(playlist[nextTrackIndex]?.url ?? "")
       : null;
-  const trackLoadKey = `${videoId ?? "none"}-${gameState.startedAt}`;
+  // 只用曲目索引決定是否重載，避免伺服器在公布階段更新 startedAt 時觸發重載
+  const trackLoadKey = `${videoId ?? "none"}`;
+  const trackSessionKey = `${currentTrackIndex}`;
 
   const postCommand = useCallback((func: string, args: unknown[] = []) => {
     const target = iframeRef.current?.contentWindow;
@@ -171,70 +192,92 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const loadTrack = useCallback(
     (id: string, startSeconds: number, autoplay: boolean) => {
+      setIsTrackLoading(true);
       postCommand(autoplay ? "loadVideoById" : "cueVideoById", [
         { videoId: id, startSeconds },
       ]);
       lastLoadedVideoIdRef.current = id;
-      lastSyncMsRef.current = Date.now();
+      lastSyncMsRef.current = getServerNowMs();
       if (!autoplay) {
         postCommand("pauseVideo");
         postCommand("seekTo", [startSeconds, true]);
+        setIsTrackLoading(false);
       }
     },
-    [postCommand]
+    [getServerNowMs, postCommand, trackLoadKey]
   );
 
   const startPlayback = useCallback(
     (forcedPosition?: number) => {
       if (waitingToStart) return;
       const startPos = forcedPosition ?? computeServerPositionSec();
-
+      const estimated = getEstimatedLocalPositionSec();
+      const needsSeek = Math.abs(estimated - startPos) > DRIFT_TOLERANCE_SEC;
       setPlayerStart((prev) =>
         Math.abs(prev - startPos) > 0.01 ? startPos : prev
       );
-      lastSyncMsRef.current = Date.now();
+      lastSyncMsRef.current = getServerNowMs();
 
-      postCommand("seekTo", [startPos, true]);
+      if (needsSeek) {
+        postCommand("seekTo", [startPos, true]);
+      }
       postCommand("playVideo");
       applyVolume(volume);
+      setIsTrackLoading(false);
     },
-    [applyVolume, computeServerPositionSec, postCommand, volume, waitingToStart]
+    [
+      applyVolume,
+      computeServerPositionSec,
+      getEstimatedLocalPositionSec,
+      getServerNowMs,
+      postCommand,
+      volume,
+      waitingToStart,
+    ]
   );
 
   const resyncPlaybackToServerTime = useCallback(() => {
-    if (waitingToStart || isEnded) return;
-    const serverPos = computeServerPositionSec();
-    const localPos = getEstimatedLocalPositionSec();
-    const drift = Math.abs(serverPos - localPos);
-    if (drift <= DRIFT_TOLERANCE_SEC) return;
-    setPlayerStart(serverPos);
-    lastSyncMsRef.current = Date.now();
-    startPlayback(serverPos);
-  }, [
-    DRIFT_TOLERANCE_SEC,
-    computeServerPositionSec,
-    getEstimatedLocalPositionSec,
-    isEnded,
-    startPlayback,
-    waitingToStart,
-  ]);
+    // 停用背景重同步，避免公布瞬間的任何 seek 造成音樂不連續
+    return;
+  }, []);
+
+  // 公布答案切換時，若音樂已在播，保持當前進度並標記載入完畢，避免重新 seek。
+  useEffect(() => {
+    if (isReveal && hasStartedPlaybackRef.current) {
+      lastSyncMsRef.current = getServerNowMs();
+      setIsTrackLoading(false);
+    }
+  }, [getServerNowMs, isReveal]);
 
   useEffect(() => {
-    setPlayerStart(computeServerPositionSec());
-    setSelectedChoice(null);
-    hasStartedPlaybackRef.current = false;
-    const interval = setInterval(() => setNowMs(Date.now()), 500);
+    if (lastTrackSessionRef.current !== trackSessionKey) {
+      const startSec = Math.max(
+        0,
+        Math.floor((getServerNowMs() - gameState.startedAt) / 1000)
+      );
+      setPlayerStart(startSec);
+      setSelectedChoice(null);
+      hasStartedPlaybackRef.current = false;
+      setIsTrackLoading(true);
+      lastTrackSessionRef.current = trackSessionKey;
+    }
+    const interval = setInterval(() => setNowMs(getServerNowMs()), 500);
     return () => clearInterval(interval);
-  }, [
-    computeServerPositionSec,
-    gameState.startedAt,
-    gameState.currentIndex,
-    currentTrackIndex,
-  ]);
+  }, [gameState.startedAt, getServerNowMs, trackSessionKey]);
 
   useEffect(() => {
     setShowVideo(gameState.showVideo ?? true);
   }, [gameState.showVideo]);
+
+  // 如果已在播放且進入公布階段，確保解除載入遮罩
+  useEffect(() => {
+    if (isReveal && hasStartedPlaybackRef.current && isTrackLoading) {
+      setIsTrackLoading(false);
+    }
+    if (isReveal && hasStartedPlaybackRef.current) {
+      lastSyncMsRef.current = getServerNowMs();
+    }
+  }, [getServerNowMs, isReveal, isTrackLoading]);
 
   useEffect(() => {
     applyVolume(volume);
@@ -277,11 +320,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       });
       navigator.mediaSession.playbackState =
         waitingToStart || isEnded ? "paused" : "playing";
-      navigator.mediaSession.setPositionState?.({
-        duration: 0,
-        position: 0,
-        playbackRate: 0,
-      });
     } catch (err) {
       console.error("mediaSession setup failed", err);
     }
@@ -308,19 +346,36 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       if (data.event === "onReady") {
         playerReadyRef.current = true;
         const currentId = videoId ?? initialVideoIdRef.current;
-        if (currentId) {
-          const startSec = waitingToStart ? 0 : computeServerPositionSec();
-          setPlayerStart(startSec);
-          loadTrack(currentId, startSec, !waitingToStart);
-          lastTrackLoadKeyRef.current = `${currentId}-${gameState.startedAt}`;
-          if (!waitingToStart) {
-            startPlayback(startSec);
-          }
+        const currentKey = `${currentId ?? "none"}`;
+        if (!currentId) return;
+        if (lastTrackLoadKeyRef.current) return; // already loaded first track
+        const startSec = waitingToStart ? 0 : computeServerPositionSec();
+        setPlayerStart(startSec);
+        loadTrack(currentId, startSec, !waitingToStart);
+        lastTrackLoadKeyRef.current = currentKey;
+        if (!waitingToStart) {
+          startPlayback(startSec);
         }
       }
 
-      if (data.event === "onStateChange" && data.info === 1) {
-        hasStartedPlaybackRef.current = true;
+      if (data.event === "onStateChange") {
+        if (data.info === 1) {
+          hasStartedPlaybackRef.current = true;
+          lastSyncMsRef.current = getServerNowMs();
+          setIsTrackLoading(false);
+        }
+        if (
+          (data.info === 2 || data.info === 3) &&
+          hasStartedPlaybackRef.current &&
+          !waitingToStart
+        ) {
+          const now = Date.now();
+          if (now - lastPassiveResumeRef.current > 1000) {
+            lastPassiveResumeRef.current = now;
+            // If YouTube pauses/buffers during phase switch, nudge play without seeking.
+            postCommand("playVideo");
+          }
+        }
       }
     };
 
@@ -344,6 +399,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     const autoplay = !waitingToStart;
     const startSec = autoplay ? computeServerPositionSec() : 0;
     setPlayerStart(startSec);
+    setIsTrackLoading(true);
     loadTrack(videoId, startSec, autoplay);
     hasStartedPlaybackRef.current = false;
     lastTrackLoadKeyRef.current = trackLoadKey;
@@ -375,20 +431,53 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   // When returning from background, re-seek to server time if drifted.
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        resyncPlaybackToServerTime();
-      }
+      return;
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () =>
       document.removeEventListener("visibilitychange", handleVisibility);
-  }, [resyncPlaybackToServerTime]);
+  }, []);
+
+  // Keyboard shortcuts for answering (default Q/W/A/S, user customizable via inputs below).
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          (active as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (isReveal || isEnded) return;
+      if (!gameState.choices?.length) return;
+
+      const pressed = e.key.toUpperCase();
+      const match = Object.entries(keyBindings).find(
+        ([_, key]) => key.toUpperCase() === pressed
+      );
+      if (!match) return;
+
+      const idx = Number(match[0]);
+      const choice = gameState.choices[idx];
+      if (!choice) return;
+      e.preventDefault();
+      setSelectedChoice(choice.index);
+      onSubmitChoice(choice.index);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [gameState.choices, isEnded, isReveal, keyBindings, onSubmitChoice]);
 
   const iframeSrc =
     initialIframeSrcRef.current ||
     (videoId
       ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
       : null);
+  // 影片持續渲染，僅用覆蓋層控制可見，避免切換時 iframe 被刷新
+  const shouldShowVideo = true;
 
   const phaseLabel = isEnded
     ? "已結束"
@@ -419,22 +508,16 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const recentMessages = messages.slice(-80);
 
-  // 預熱下一首（在公布階段尾端先啟動下一首靜音播放，降低背景被擋的機率）
-  useEffect(() => {
-    if (
-      isReveal &&
-      phaseRemainingMs < 2000 &&
-      nextVideoId &&
-      preheatVideoId !== nextVideoId
-    ) {
-      setPreheatVideoId(nextVideoId);
-    }
-  }, [isReveal, phaseRemainingMs, nextVideoId, preheatVideoId]);
-
-  // 切歌後清掉預熱狀態
+  // （預熱暫停使用，以排除干擾播放的可能）
   useEffect(() => {
     setPreheatVideoId(null);
-  }, [gameState.startedAt, boundedCursor]);
+  }, [
+    gameState.startedAt,
+    boundedCursor,
+    isReveal,
+    phaseRemainingMs,
+    nextVideoId,
+  ]);
 
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -452,6 +535,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           <span className="inline-block h-1.5 w-6 rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" />
           <span className="text-sm font-semibold">分數榜</span>
           <span className="text-[11px] text-slate-400">(前五名 + 自己)</span>
+          <Chip
+            label={`已答 ${lockedCount}/${participants.length || 0}`}
+            size="small"
+            color="success"
+            variant="outlined"
+            className="ml-auto"
+          />
         </div>
         <div className="space-y-2">
           {scoreboardList.length === 0 ? (
@@ -461,23 +551,45 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
               <div
                 key={p.clientId}
                 className={`flex items-center justify-between rounded px-2 py-1 text-sm ${
-                  p.clientId === meClientId
-                    ? "border border-emerald-600/50 bg-emerald-900/40 text-emerald-100"
+                  gameState.lockedClientIds?.includes(p.clientId)
+                    ? "border border-emerald-500/50 bg-emerald-900/40 text-emerald-50"
                     : "bg-slate-800/40 text-slate-200"
+                } ${
+                  p.clientId === meClientId ? "ring-1 ring-emerald-400/70" : ""
                 }`}
               >
-                <span className="truncate">
+                <span className="truncate flex items-center gap-2">
+                  {gameState.lockedClientIds?.includes(p.clientId) && (
+                    <span
+                      className="h-2 w-2 rounded-full bg-emerald-400"
+                      title="已選答案"
+                    />
+                  )}
                   {idx + 1}.{" "}
                   {p.clientId === meClientId
                     ? `${p.username}（我）`
                     : p.username}
                 </span>
-                <span className="font-semibold text-emerald-300">
-                  {p.score}
-                  {p.combo > 1 && (
-                    <span className="ml-1 text-amber-300">x{p.combo}</span>
+                <div className="flex items-center gap-2">
+                  {gameState.lockedClientIds?.includes(p.clientId) ? (
+                    <Chip
+                      label={`第${
+                        lockedOrder.indexOf(p.clientId) + 1 || "?"
+                      }答`}
+                      size="small"
+                      color="success"
+                      variant="filled"
+                    />
+                  ) : (
+                    <Chip label="未答" size="small" variant="outlined" />
                   )}
-                </span>
+                  <span className="font-semibold text-emerald-300">
+                    {p.score}
+                    {p.combo > 1 && (
+                      <span className="ml-1 text-amber-300">x{p.combo}</span>
+                    )}
+                  </span>
+                </div>
               </div>
             ))
           )}
@@ -583,16 +695,15 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
             {iframeSrc ? (
               <iframe
                 src={iframeSrc}
-                className={`h-full w-full object-contain transition-opacity duration-300 ${
-                  gameState.phase === "guess" || !showVideo
-                    ? "opacity-0"
-                    : "opacity-100"
-                }`}
+                className="h-full w-full object-contain"
                 allow="autoplay; encrypted-media"
                 controlsList="nodownload noremoteplayback"
                 allowFullScreen
                 title="Now playing"
-                style={{ pointerEvents: "none" }}
+                style={{
+                  pointerEvents: "none",
+                  opacity: shouldShowVideo ? 1 : 1,
+                }}
                 ref={iframeRef}
                 onLoad={() => {
                   const target = iframeRef.current?.contentWindow;
@@ -614,26 +725,21 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 暫時沒有可播放的影片來源
               </div>
             )}
-            {preheatVideoId && (
-              <iframe
-                className="hidden"
-                src={`https://www.youtube-nocookie.com/embed/${preheatVideoId}?autoplay=1&mute=1&controls=0&disablekb=1&playsinline=1&rel=0&modestbranding=1&fs=0`}
-                allow="autoplay; encrypted-media"
-                controlsList="nodownload noremoteplayback"
-                title="preheat-next-track"
-              />
-            )}
             {gameState.phase === "guess" && !isEnded && (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-slate-950">
                 <div className="h-24 w-24 animate-spin rounded-full border-4 border-slate-700 shadow-lg shadow-emerald-500/30" />
                 <p className="mt-2 text-xs text-slate-300">
                   {waitingToStart
                     ? `遊戲即將開始 · ${Math.ceil(
                         (gameState.startedAt - nowMs) / 1000
                       )}s`
-                    : `${phaseLabel}中`}
+                    : "猜歌中，影片已隱藏"}
                 </p>
               </div>
+            )}
+            {/* 避免換曲瞬間曝光：僅在載入期間遮蔽 */}
+            {isTrackLoading && (
+              <div className="pointer-events-none absolute inset-0 bg-slate-950" />
             )}
           </div>
 
@@ -733,7 +839,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                     onSubmitChoice(choice.index);
                   }}
                 >
-                  {choice.title}
+                  <div className="flex w-full items-center justify-between">
+                    <span className="truncate">{choice.title}</span>
+                    <span className="ml-3 inline-flex h-6 w-6 flex-none items-center justify-center rounded bg-slate-800 text-[11px] font-semibold text-slate-200 border border-slate-700">
+                      {(keyBindings[idx] ?? "").toUpperCase()}
+                    </span>
+                  </div>
                 </Button>
               );
             })}
