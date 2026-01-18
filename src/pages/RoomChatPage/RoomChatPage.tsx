@@ -63,7 +63,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   });
   const [isConnected, setIsConnected] = useState(false);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [roomNameInput, setRoomNameInput] = useState("");
+  const [roomNameInput, setRoomNameInput] = useState(`${username}'s room`);
   const [roomPasswordInput, setRoomPasswordInput] = useState("");
   const [joinPasswordInput, setJoinPasswordInput] = useState("");
   const [currentRoom, setCurrentRoom] = useState<RoomState["room"] | null>(
@@ -96,12 +96,14 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     total: number;
     ready: boolean;
   }>({ received: 0, total: 0, ready: false });
-  const clampQuestionCount = (value: number) =>
-    Math.min(QUESTION_MAX, Math.max(QUESTION_MIN, value));
+  const getQuestionMax = (playlistCount: number) =>
+    playlistCount > 0 ? Math.min(QUESTION_MAX, playlistCount) : QUESTION_MAX;
+  const clampQuestionCount = (value: number, maxValue: number) =>
+    Math.min(maxValue, Math.max(QUESTION_MIN, value));
   const [questionCount, setQuestionCount] = useState<number>(() => {
     const saved = Number(localStorage.getItem(STORAGE_KEYS.questionCount));
     const initial = Number.isFinite(saved) ? saved : 10;
-    return clampQuestionCount(initial);
+    return clampQuestionCount(initial, getQuestionMax(0));
   });
   const [inviteRoomId] = useState<string | null>(() => {
     if (inviteId) return inviteId;
@@ -157,7 +159,10 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     localStorage.getItem(roomPasswordKey(roomId));
 
   const updateQuestionCount = (value: number) => {
-    const clamped = clampQuestionCount(value);
+    const clamped = clampQuestionCount(
+      value,
+      getQuestionMax(playlistItems.length)
+    );
     setQuestionCount(clamped);
     localStorage.setItem(STORAGE_KEYS.questionCount, String(clamped));
   };
@@ -974,11 +979,22 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     playlistPageSize,
   ]);
 
+  const questionMaxLimit = getQuestionMax(playlistItems.length);
+
   useEffect(() => {
     if (currentRoom?.id) {
       navigate(`/rooms/${currentRoom.id}`, { replace: true });
     }
   }, [currentRoom?.id, navigate]);
+
+  useEffect(() => {
+    if (playlistItems.length === 0) return;
+    const maxValue = getQuestionMax(playlistItems.length);
+    if (questionCount > maxValue) {
+      setQuestionCount(maxValue);
+      localStorage.setItem(STORAGE_KEYS.questionCount, String(maxValue));
+    }
+  }, [playlistItems.length, questionCount]);
 
   useEffect(() => {
     if (!currentRoom?.id) {
@@ -1126,8 +1142,9 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
                   questionCount={questionCount}
                   onQuestionCountChange={updateQuestionCount}
                   questionMin={QUESTION_MIN}
-                  questionMax={QUESTION_MAX}
+                  questionMax={questionMaxLimit}
                   questionStep={QUESTION_STEP}
+                  questionControlsEnabled={playlistItems.length > 0}
                   onRoomNameChange={setRoomNameInput}
                   onRoomPasswordChange={setRoomPasswordInput}
                   onJoinPasswordChange={setJoinPasswordInput}

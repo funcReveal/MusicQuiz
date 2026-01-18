@@ -2,17 +2,23 @@ import React from "react";
 import {
   Alert,
   Avatar,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   Card,
   CardContent,
   CardHeader,
   Chip,
   Divider,
+  Fade,
   LinearProgress,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { List as VirtualList, type RowComponentProps } from "react-window";
 import type { PlaylistItem, RoomSummary } from "../types";
 
@@ -35,6 +41,8 @@ interface RoomCreationSectionProps {
   questionMin?: number;
   questionMax?: number;
   questionStep?: number;
+  questionControlsEnabled?: boolean;
+  questionLimitLabel?: string;
   showRoomList?: boolean;
   onRoomNameChange: (value: string) => void;
   onRoomPasswordChange: (value: string) => void;
@@ -65,6 +73,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   questionMin = 1,
   questionMax = 100,
   questionStep = 5,
+  questionControlsEnabled = true,
   showRoomList = true,
   onRoomNameChange,
   onRoomPasswordChange,
@@ -80,6 +89,9 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   );
   const showPlaylistInput = playlistStage === "input";
   const rowCount = playlistItems.length;
+  const canAdjustQuestions =
+    questionControlsEnabled && playlistItems.length > 0;
+
   const isPlaylistLink = React.useMemo(() => {
     const url = playlistUrl.trim();
     if (!url) return false;
@@ -224,68 +236,170 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             />
           </Stack>
 
-          <Stack
-            direction={"row"}
-            spacing={1.5}
-            alignItems={{ sm: "center" }}
+          <Accordion
+            disabled={!canAdjustQuestions}
+            disableGutters
+            square
             sx={{
-              p: 1,
-              // border: "1px solid",
-              // borderColor: "rgba(148,163,184,0.25)",
-              // borderRadius: 1.5,
-              minWidth: "fit-content",
+              borderRadius: 1.5,
+              backgroundColor: "rgba(15,23,42,0.4)",
+              border: "1px solid rgba(148,163,184,0.2)",
+              transition:
+                "background-color 200ms ease, border-color 200ms ease",
+              "&::before": {
+                display: "none",
+              },
+              "&.Mui-disabled": {
+                opacity: 1,
+                backgroundColor: "rgba(15,23,42,0.25)",
+              },
+              "& .MuiButton-root": {
+                transition: "color 200ms ease, border-color 200ms ease",
+              },
             }}
           >
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => onQuestionCountChange(questionMin)}
-                disabled={questionCount === questionMin}
+            <AccordionSummary
+              sx={{
+                "&.Mui-disabled .MuiTypography-root": {
+                  color: "rgba(241,245,249,0.95)",
+                  opacity: 1,
+                  transition: "color 200ms ease, opacity 200ms ease",
+                },
+                "&.Mui-disabled .MuiSvgIcon-root": {
+                  opacity: 1,
+                },
+                "&.Mui-disabled .MuiAccordionSummary-expandIconWrapper": {
+                  color: "rgba(148,163,184,0.9)",
+                },
+              }}
+              expandIcon={
+                !canAdjustQuestions ? (
+                  <Fade in={!canAdjustQuestions} timeout={200} unmountOnExit>
+                    <LockOutlinedIcon
+                      fontSize="small"
+                      sx={{
+                        color: "text.disabled",
+                      }}
+                    />
+                  </Fade>
+                ) : (
+                  <ExpandMoreIcon
+                    sx={{
+                      color: canAdjustQuestions
+                        ? "text.primary"
+                        : "text.disabled",
+                    }}
+                  />
+                )
+              }
+            >
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" className="text-slate-100">
+                  房間設定
+                </Typography>
+                <Fade in={!canAdjustQuestions} timeout={200} unmountOnExit>
+                  <Typography variant="caption" className="text-slate-400">
+                    匯入歌單後解鎖
+                  </Typography>
+                </Fade>
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Stack
+                direction={"row"}
+                spacing={1.5}
+                alignItems={{ sm: "center" }}
+                sx={{
+                  p: 1,
+                  minWidth: "fit-content",
+                }}
               >
-                最小
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => adjustQuestionCount(-questionStep)}
-                disabled={questionCount <= questionMin}
-              >
-                -{questionStep}
-              </Button>
-            </Stack>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => onQuestionCountChange(questionMin)}
+                    disabled={
+                      !canAdjustQuestions || questionCount === questionMin
+                    }
+                  >
+                    最小
+                  </Button>
 
-            <Stack spacing={0.25} alignItems={"center"} sx={{ minWidth: 120 }}>
-              <Typography variant="body2" className="text-slate-200">
-                題數
-              </Typography>
-              <Typography variant="h4" className="text-slate-50">
-                {questionCount}
-              </Typography>
-              <Typography variant="caption" className="text-slate-400">
-                {questionMin}–{questionMax}
-              </Typography>
-            </Stack>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => adjustQuestionCount(-questionStep)}
+                    disabled={
+                      !canAdjustQuestions || questionCount <= questionMin
+                    }
+                  >
+                    -{questionStep}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => adjustQuestionCount(-1)}
+                    disabled={
+                      !canAdjustQuestions || questionCount <= questionMin
+                    }
+                  >
+                    -1
+                  </Button>
+                </Stack>
 
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => adjustQuestionCount(questionStep)}
-                disabled={questionCount >= questionMax}
-              >
-                +{questionStep}
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => onQuestionCountChange(questionMax)}
-                disabled={questionCount === questionMax}
-              >
-                最大
-              </Button>
-            </Stack>
-          </Stack>
+                <Stack
+                  spacing={0.25}
+                  alignItems={"center"}
+                  sx={{ minWidth: 120 }}
+                >
+                  <Typography variant="body2" className="text-slate-200">
+                    題數
+                  </Typography>
+                  <Typography variant="h4" className="text-slate-50">
+                    {questionCount}
+                  </Typography>
+                  <Typography variant="caption" className="text-slate-400">
+                    {questionMin}–{questionMax}
+                  </Typography>
+                </Stack>
+
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => adjustQuestionCount(1)}
+                    disabled={
+                      !canAdjustQuestions || questionCount >= questionMax
+                    }
+                  >
+                    +1
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => adjustQuestionCount(questionStep)}
+                    disabled={
+                      !canAdjustQuestions || questionCount >= questionMax
+                    }
+                  >
+                    +{questionStep}
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => onQuestionCountChange(questionMax)}
+                    disabled={
+                      !canAdjustQuestions || questionCount === questionMax
+                    }
+                  >
+                    最大
+                  </Button>
+                </Stack>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
           <Button
             sx={{ mb: "20px" }}
             fullWidth
