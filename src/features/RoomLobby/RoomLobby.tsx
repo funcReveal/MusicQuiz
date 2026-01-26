@@ -266,6 +266,44 @@ const RoomLobby: React.FC<RoomLobbyProps> = ({
         sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1.5 }}
       >
         <Box>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            flexWrap="wrap"
+            mb={1}
+          >
+            <Typography variant="subtitle2" className="text-slate-200">
+              房間設定
+            </Typography>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`題數 ${currentRoom?.gameSettings?.questionCount ?? "-"}`}
+              className="text-slate-200 border-slate-600"
+            />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`清單 ${currentRoom?.playlist.totalCount ?? "-"} 首`}
+              className="text-slate-200 border-slate-600"
+            />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={playlistProgress.ready ? "清單已就緒" : "清單準備中"}
+              className="text-slate-200 border-slate-600"
+            />
+            {currentRoom?.hasPassword && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label="有密碼"
+                className="text-slate-200 border-slate-600"
+              />
+            )}
+          </Stack>
+
           <Typography
             variant="subtitle2"
             className="text-slate-200"

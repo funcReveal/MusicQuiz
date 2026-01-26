@@ -20,7 +20,8 @@ import type {
 } from "./types";
 import { Button, Snackbar } from "@mui/material";
 
-const SERVER_URL = import.meta.env.VITE_SOCKET_URL;
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
+const API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_PAGE_SIZE = 50;
 const CHUNK_SIZE = 200;
 const QUESTION_MIN = 5;
@@ -47,10 +48,10 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const [usernameInput, setUsernameInput] = useState(
-    () => localStorage.getItem(STORAGE_KEYS.username) ?? ""
+    () => localStorage.getItem(STORAGE_KEYS.username) ?? "",
   );
   const [username, setUsername] = useState<string | null>(
-    () => localStorage.getItem(STORAGE_KEYS.username) ?? null
+    () => localStorage.getItem(STORAGE_KEYS.username) ?? null,
   );
   const [clientId] = useState<string>(() => {
     const existing = localStorage.getItem(STORAGE_KEYS.clientId);
@@ -67,7 +68,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   const [roomPasswordInput, setRoomPasswordInput] = useState("");
   const [joinPasswordInput, setJoinPasswordInput] = useState("");
   const [currentRoom, setCurrentRoom] = useState<RoomState["room"] | null>(
-    null
+    null,
   );
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -78,14 +79,14 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [playlistStage, setPlaylistStage] = useState<"input" | "preview">(
-    "input"
+    "input",
   );
   const [playlistLocked, setPlaylistLocked] = useState(false);
   const [lastFetchedPlaylistId, setLastFetchedPlaylistId] = useState<
     string | null
   >(() => null);
   const [playlistViewItems, setPlaylistViewItems] = useState<PlaylistItem[]>(
-    []
+    [],
   );
   const [playlistHasMore, setPlaylistHasMore] = useState(false);
   const [playlistLoadingMore, setPlaylistLoadingMore] = useState(false);
@@ -117,14 +118,14 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   const [gamePlaylist, setGamePlaylist] = useState<PlaylistItem[]>([]);
   const [isGameView, setIsGameView] = useState(false);
   const [routeRoomResolved, setRouteRoomResolved] = useState<boolean>(
-    () => !routeRoomId
+    () => !routeRoomId,
   );
   const [hostRoomPassword, setHostRoomPassword] = useState<string | null>(null);
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
 
   const socketRef = useRef<ClientSocket | null>(null);
   const currentRoomIdRef = useRef<string | null>(
-    routeRoomId ?? localStorage.getItem(STORAGE_KEYS.roomId)
+    routeRoomId ?? localStorage.getItem(STORAGE_KEYS.roomId),
   );
   const serverOffsetRef = useRef(0);
 
@@ -161,7 +162,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   const updateQuestionCount = (value: number) => {
     const clamped = clampQuestionCount(
       value,
-      getQuestionMax(playlistItems.length)
+      getQuestionMax(playlistItems.length),
     );
     setQuestionCount(clamped);
     localStorage.setItem(STORAGE_KEYS.questionCount, String(clamped));
@@ -199,34 +200,11 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     }
   };
 
-  const formatDuration = (iso8601: string | undefined) => {
-    if (!iso8601) return undefined;
-    const match = iso8601.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return undefined;
-
-    const hours = Number(match[1] ?? 0);
-    const minutes = Number(match[2] ?? 0);
-    const seconds = Number(match[3] ?? 0);
-    const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-
-    const displayHours = Math.floor(totalSeconds / 3600);
-    const displayMinutes = Math.floor((totalSeconds % 3600) / 60);
-    const displaySeconds = totalSeconds % 60;
-
-    if (displayHours > 0) {
-      return `${displayHours}:${displayMinutes
-        .toString()
-        .padStart(2, "0")}:${displaySeconds.toString().padStart(2, "0")}`;
-    }
-
-    return `${displayMinutes}:${displaySeconds.toString().padStart(2, "0")}`;
-  };
-
   const fetchPlaylistPage = (
     roomId: string,
     page: number,
     pageSize?: number,
-    opts?: { reset?: boolean }
+    opts?: { reset?: boolean },
   ) => {
     const s = getSocket();
     if (!s) {
@@ -254,7 +232,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
           page: number;
           pageSize: number;
           ready: boolean;
-        }>
+        }>,
       ) => {
         if (ack?.ok) {
           setPlaylistViewItems((prev) => {
@@ -274,7 +252,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
           }));
         }
         setPlaylistLoadingMore(false);
-      }
+      },
     );
   };
 
@@ -300,7 +278,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
                 page: number;
                 pageSize: number;
                 ready: boolean;
-              }>
+              }>,
             ) => {
               if (ack?.ok) {
                 aggregated.push(...ack.data.items);
@@ -315,19 +293,19 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
               } else {
                 resolve(aggregated);
               }
-            }
+            },
           );
         };
 
         loadPage(1);
       }),
-    [playlistPageSize]
+    [playlistPageSize],
   );
 
   useEffect(() => {
     if (!username) return;
 
-    const s = io(SERVER_URL, {
+    const s = io(SOCKET_URL, {
       transports: ["websocket"],
       auth: { clientId },
     });
@@ -383,7 +361,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
                 state.room.playlist.pageSize,
                 {
                   reset: true,
-                }
+                },
               );
               persistRoomId(state.room.id);
               setStatusText(`恢復房間：${state.room.name}`);
@@ -392,7 +370,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
               persistRoomId(null);
               setRouteRoomResolved(true);
             }
-          }
+          },
         );
       }
     });
@@ -477,7 +455,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     s.on("playlistUpdated", ({ roomId, playlist }) => {
       if (roomId !== currentRoomIdRef.current) return;
       setCurrentRoom((prev) =>
-        prev ? { ...prev, playlist: { ...playlist, items: [] } } : prev
+        prev ? { ...prev, playlist: { ...playlist, items: [] } } : prev,
       );
       setPlaylistProgress({
         received: playlist.receivedCount,
@@ -544,7 +522,12 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
       roomName: trimmed,
       username,
       password: roomPasswordInput.trim() || undefined,
-      gameSettings: { questionCount: clampQuestionCount(questionCount) },
+      gameSettings: {
+        questionCount: clampQuestionCount(
+          questionCount,
+          getQuestionMax(playlistItems.length),
+        ),
+      },
       playlist: {
         uploadId,
         id: lastFetchedPlaylistId,
@@ -594,7 +577,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
                   items: chunk,
                   isLast: isLastChunk,
                 },
-                () => resolve()
+                () => resolve(),
               );
             });
           }
@@ -649,7 +632,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
         } else {
           setStatusText(`加入房間失敗：${ack.error}`);
         }
-      }
+      },
     );
   };
 
@@ -722,7 +705,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
         } else {
           setStatusText(`開始遊戲失敗：${ack.error}`);
         }
-      }
+      },
     );
   };
 
@@ -747,6 +730,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
 
   const handleFetchPlaylist = async () => {
     setPlaylistError(null);
+
     if (playlistLocked && lastFetchedPlaylistId) {
       setPlaylistError("播放清單已鎖定，如需重選請按「重選播放清單」");
       return;
@@ -758,196 +742,59 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
       return;
     }
 
-    const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined;
-    if (!apiKey) {
-      setPlaylistError("尚未設定 YouTube API 金鑰 (VITE_YOUTUBE_API_KEY)");
-      return;
-    }
-
-    const isAutoMixId = (id: string) =>
-      id.startsWith("RD") || id.startsWith("OLAK5uy_");
-    if (isAutoMixId(playlistId)) {
-      setPlaylistError(
-        "YouTube 自動合輯/混合歌曲無法透過 API 取得，請改用公開的播放清單。"
-      );
+    if (!API_URL) {
+      setPlaylistError("尚未設定 API 位置 (VITE_API_URL)");
       return;
     }
 
     setPlaylistLoading(true);
+
     try {
-      // 先檢查清單狀態（是否存在、是否私人）
-      const metaParams = new URLSearchParams({
-        part: "status,contentDetails",
-        id: playlistId,
-        key: apiKey,
+      const res = await fetch(`${API_URL}/api/playlists/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playlistId, url: playlistUrl }),
       });
-      const metaRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/playlists?${metaParams.toString()}`
-      );
-      if (!metaRes.ok) {
-        const metaErr = await metaRes.json().catch(() => null);
-        const reason =
-          metaErr?.error?.errors?.[0]?.reason ??
-          metaErr?.error?.message ??
-          "無法讀取清單資訊";
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "讀取播放清單失敗，請稍後重試");
+      }
+
+      const data = payload as {
+        playlistId: string;
+        items: PlaylistItem[];
+        expectedCount: number | null;
+        skippedCount: number;
+      };
+
+      if (!data?.items || data.items.length === 0) {
         throw new Error(
-          reason === "playlistNotFound"
-            ? "找不到清單，可能不存在或無法公開存取"
-            : `讀取清單資訊失敗：${reason}`
-        );
-      }
-      const meta = await metaRes.json();
-      const playlistInfo = (
-        meta.items as
-          | Array<{
-              status?: { privacyStatus?: string };
-              contentDetails?: { itemCount?: number };
-            }>
-          | undefined
-      )?.[0];
-      if (!playlistInfo) {
-        throw new Error("找不到清單，可能不存在或無法公開存取");
-      }
-      if (playlistInfo.status?.privacyStatus === "private") {
-        throw new Error("此清單為私人或受限，無法讀取");
-      }
-      const expectedCount = playlistInfo.contentDetails?.itemCount ?? null;
-
-      const items: PlaylistItem[] = [];
-      let nextPageToken: string | undefined;
-
-      do {
-        const params = new URLSearchParams({
-          part: "snippet,contentDetails",
-          maxResults: "50",
-          playlistId,
-          key: apiKey,
-        });
-
-        if (nextPageToken) {
-          params.set("pageToken", nextPageToken);
-        }
-
-        const res = await fetch(
-          `https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`
-        );
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => null);
-          const reason =
-            errJson?.error?.errors?.[0]?.reason ??
-            errJson?.error?.message ??
-            "讀取播放清單失敗";
-          if (reason === "playlistItemsNotAccessible") {
-            throw new Error("此播放清單未公開或受限，無法讀取內容。");
-          }
-          throw new Error(`讀取播放清單失敗，請稍後再試（${reason}）`);
-        }
-
-        const data = await res.json();
-        const playlistVideos = (data.items ?? []) as Array<{
-          snippet?: {
-            title?: string;
-            channelTitle?: string;
-            videoOwnerChannelTitle?: string;
-            resourceId?: { videoId?: string };
-            thumbnails?: Record<
-              string,
-              { url?: string; width?: number; height?: number }
-            >;
-          };
-          contentDetails?: { videoId?: string };
-        }>;
-
-        const videoIds = playlistVideos
-          .map(
-            (item) =>
-              item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId
-          )
-          .filter((id): id is string => Boolean(id));
-
-        const durationMap = new Map<string, string | undefined>();
-        if (videoIds.length > 0) {
-          const videoParams = new URLSearchParams({
-            part: "contentDetails",
-            id: videoIds.join(","),
-            key: apiKey,
-          });
-
-          const videoRes = await fetch(
-            `https://www.googleapis.com/youtube/v3/videos?${videoParams.toString()}`
-          );
-          if (videoRes.ok) {
-            const videoData = await videoRes.json();
-            (
-              videoData.items as
-                | Array<{ id?: string; contentDetails?: { duration?: string } }>
-                | undefined
-            )?.forEach((video) => {
-              if (video.id) {
-                durationMap.set(
-                  video.id,
-                  formatDuration(video.contentDetails?.duration)
-                );
-              }
-            });
-          }
-        }
-
-        items.push(
-          ...playlistVideos.map((item) => {
-            const videoId =
-              item.contentDetails?.videoId ??
-              item.snippet?.resourceId?.videoId ??
-              "";
-            const thumb =
-              item.snippet?.thumbnails?.maxres?.url ??
-              item.snippet?.thumbnails?.standard?.url ??
-              item.snippet?.thumbnails?.high?.url ??
-              item.snippet?.thumbnails?.medium?.url ??
-              item.snippet?.thumbnails?.default?.url ??
-              undefined;
-            return {
-              title: item.snippet?.title ?? "未命名影片",
-              url: videoId
-                ? `https://www.youtube.com/watch?v=${videoId}&list=${playlistId}`
-                : "",
-              uploader:
-                item.snippet?.videoOwnerChannelTitle ??
-                item.snippet?.channelTitle ??
-                "",
-              duration: videoId ? durationMap.get(videoId) : undefined,
-              thumbnail: thumb,
-            } satisfies PlaylistItem;
-          })
-        );
-
-        nextPageToken = data.nextPageToken;
-      } while (nextPageToken);
-
-      if (items.length === 0) {
-        throw new Error(
-          "清單沒有可用影片，可能為私人/受限或自動合輯不受支援。"
+          "清單沒有可用影片，可能為私人/受限或自動合輯不受支援。",
         );
       }
 
-      setPlaylistItems(items);
+      setPlaylistItems(data.items);
       setPlaylistStage("preview");
       setPlaylistLocked(true);
-      setLastFetchedPlaylistId(playlistId);
-      if (expectedCount !== null && expectedCount !== items.length) {
+      setLastFetchedPlaylistId(data.playlistId ?? playlistId);
+
+      if (
+        data.expectedCount !== null &&
+        data.expectedCount !== data.items.length
+      ) {
         setStatusText(
-          `已載入播放清單，共 ${items.length} 首（原清單顯示 ${expectedCount}）`
+          `已載入播放清單，共 ${data.items.length} 首（已略過私人或無法存取的影片）`,
         );
       } else {
-        setStatusText(`已載入播放清單，共 ${items.length} 首`);
+        setStatusText(`已載入播放清單，共 ${data.items.length} 首`);
       }
     } catch (error) {
       console.error(error);
-      const message =
+      setPlaylistError(
         error instanceof Error
           ? error.message
-          : "讀取播放清單時發生錯誤，請確認網路後重試";
-      setPlaylistError(message);
+          : "讀取播放清單時發生錯誤，請確認網路後重試",
+      );
       setPlaylistItems([]);
       setPlaylistStage("input");
       setPlaylistLocked(false);
@@ -1022,7 +869,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     return (
       <div className="flex flex-col w-95/100 space-y-4">
         <HeaderSection
-          serverUrl={SERVER_URL}
+          serverUrl={SOCKET_URL}
           isConnected={isConnected}
           displayUsername={displayUsername}
         />
@@ -1043,7 +890,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     return (
       <div className="flex flex-col w-full min-h-screen space-y-4">
         <HeaderSection
-          serverUrl={SERVER_URL}
+          serverUrl={SOCKET_URL}
           isConnected={isConnected}
           displayUsername={displayUsername}
         />
@@ -1076,7 +923,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   return (
     <div className="flex flex-col w-95/100 space-y-4">
       <HeaderSection
-        serverUrl={SERVER_URL}
+        serverUrl={SOCKET_URL}
         isConnected={isConnected}
         displayUsername={displayUsername}
       />
@@ -1096,7 +943,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
                 joinPassword={joinPasswordInput}
                 inviteRoom={
                   inviteRoomId
-                    ? rooms.find((room) => room.id === inviteRoomId) ?? null
+                    ? (rooms.find((room) => room.id === inviteRoomId) ?? null)
                     : null
                 }
                 inviteRoomId={inviteRoomId}
@@ -1282,10 +1129,10 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
         )}
       </div>
 
-      {statusText && (
+      {/* {statusText && (
         // <div className="text-xs text-slate-400 mt-1">Status: {statusText}</div>
         <Snackbar message={`Status: ${statusText}`} open={true} />
-      )}
+      )} */}
     </div>
   );
 };
