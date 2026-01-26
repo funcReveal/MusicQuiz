@@ -22,6 +22,8 @@ import { Button, Snackbar } from "@mui/material";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 const API_URL = import.meta.env.VITE_API_URL;
+const PLAYLIST_API_URL =
+  import.meta.env.VITE_PLAYLIST_API_URL ?? API_URL;
 const DEFAULT_PAGE_SIZE = 50;
 const CHUNK_SIZE = 200;
 const QUESTION_MIN = 5;
@@ -742,15 +744,17 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
       return;
     }
 
-    if (!API_URL) {
-      setPlaylistError("尚未設定 API 位置 (VITE_API_URL)");
+    if (!PLAYLIST_API_URL) {
+      setPlaylistError(
+        "尚未設定播放清單 API 位置 (VITE_PLAYLIST_API_URL 或 VITE_API_URL)"
+      );
       return;
     }
 
     setPlaylistLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/playlists/preview`, {
+      const res = await fetch(`${PLAYLIST_API_URL}/api/playlists/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playlistId, url: playlistUrl }),

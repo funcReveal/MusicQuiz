@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface HeaderSectionProps {
   serverUrl: string;
@@ -11,6 +12,8 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
   isConnected,
   displayUsername,
 }) => {
+  const navigate = useNavigate();
+
   async function checkPing() {
     const start = performance.now();
     await fetch(`${import.meta.env.VITE_API_URL}/health`);
@@ -18,6 +21,8 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
     return Math.round(end - start);
   }
   const [ping, setPing] = useState<number | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -30,6 +35,20 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
     }, 3000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
   }, []);
   return (
     <header className="mb-3 flex items-center justify-between gap-4">
@@ -59,11 +78,50 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
             {isConnected ? "Connected" : "Disconnected"}
           </span>
         </div>
-        <div>
-          使用者:
-          <span className="ml-1 font-medium text-slate-200">
-            {displayUsername}
-          </span>
+        <div className="flex items-center justify-end gap-1" ref={menuRef}>
+          <span>使用者:</span>
+          <div className="relative inline-flex items-center">
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium text-slate-200 transition-colors hover:bg-slate-800/70"
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+            >
+              <span>{displayUsername}</span>
+              <span
+                className={`text-[10px] transition-transform ${
+                  isMenuOpen ? "rotate-180" : ""
+                }`}
+              >
+                ▼
+              </span>
+            </button>
+            {isMenuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-36 rounded-lg border border-slate-700 bg-slate-950/95 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate("/rooms");
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                >
+                  回主畫面
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate("/edit");
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                >
+                  自己的收藏庫
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         Ping: {ping ? ping + "ms" : "Loading.."}
       </div>
