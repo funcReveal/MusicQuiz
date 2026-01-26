@@ -79,17 +79,12 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   onCreateRoom,
 }) => {
   const [settingsExpanded, setSettingsExpanded] = React.useState(false);
-  const passwordRef = React.useRef(roomPassword);
-  const isComposingRef = React.useRef(false);
   const isAsciiAlphaNum = (value: string) => /^[a-zA-Z0-9]*$/.test(value);
   const canCreateRoom = Boolean(
     username && roomName.trim() && playlistItems.length > 0,
   );
   const showPlaylistInput = playlistStage === "input";
 
-  React.useEffect(() => {
-    passwordRef.current = roomPassword;
-  }, [roomPassword]);
   const rowCount = playlistItems.length;
   const canAdjustQuestions =
     questionControlsEnabled && playlistItems.length > 0;
@@ -188,36 +183,9 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               slotProps={{ inputLabel: { shrink: true } }}
               placeholder="留空代表不設密碼"
               value={roomPassword}
-              onCompositionStart={() => {
-                isComposingRef.current = true;
-              }}
-              onCompositionEnd={(e) => {
-                isComposingRef.current = false;
-                const value = e.currentTarget.value;
-                if (isAsciiAlphaNum(value)) {
-                  passwordRef.current = value;
-                  onRoomPasswordChange(value);
-                } else {
-                  onRoomPasswordChange(passwordRef.current);
-                }
-              }}
-              onBeforeInput={(e) => {
-                const data = e.data ?? "";
-                if (data && !isAsciiAlphaNum(data)) {
-                  e.preventDefault();
-                }
-              }}
-              onPaste={(e) => {
-                const pasted = e.clipboardData.getData("text");
-                if (pasted && !isAsciiAlphaNum(pasted)) {
-                  e.preventDefault();
-                }
-              }}
               onChange={(e) => {
-                if (isComposingRef.current) return;
                 const value = e.target.value;
                 if (!isAsciiAlphaNum(value)) return;
-                passwordRef.current = value;
                 onRoomPasswordChange(value);
               }}
               disabled={!username}

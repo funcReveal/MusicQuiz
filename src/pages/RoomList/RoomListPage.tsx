@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useRoom } from "../../features/Room/useRoom";
@@ -14,8 +14,6 @@ const RoomListPage: React.FC = () => {
     setJoinPasswordInput,
     handleJoinRoom,
   } = useRoom();
-  const joinPasswordRef = useRef(joinPasswordInput);
-  const isComposingRef = useRef(false);
 
   useEffect(() => {
     if (currentRoom?.id) {
@@ -23,9 +21,6 @@ const RoomListPage: React.FC = () => {
     }
   }, [currentRoom?.id, navigate]);
 
-  useEffect(() => {
-    joinPasswordRef.current = joinPasswordInput;
-  }, [joinPasswordInput]);
 
   return (
     <div className="flex gap-4 flex-row justify-center">
@@ -80,36 +75,9 @@ const RoomListPage: React.FC = () => {
                             className="w-28 px-2 py-1 text-xs rounded bg-slate-900 border border-slate-700 text-slate-200"
                             placeholder="房間密碼"
                             value={joinPasswordInput}
-                            onCompositionStart={() => {
-                              isComposingRef.current = true;
-                            }}
-                            onCompositionEnd={(e) => {
-                              isComposingRef.current = false;
-                              const value = e.currentTarget.value;
-                              if (/^[a-zA-Z0-9]*$/.test(value)) {
-                                joinPasswordRef.current = value;
-                                setJoinPasswordInput(value);
-                              } else {
-                                setJoinPasswordInput(joinPasswordRef.current);
-                              }
-                            }}
-                            onBeforeInput={(e) => {
-                              const data = e.data ?? "";
-                              if (data && !/^[a-zA-Z0-9]*$/.test(data)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onPaste={(e) => {
-                              const pasted = e.clipboardData.getData("text");
-                              if (pasted && !/^[a-zA-Z0-9]*$/.test(pasted)) {
-                                e.preventDefault();
-                              }
-                            }}
                             onChange={(e) => {
-                              if (isComposingRef.current) return;
                               const value = e.target.value;
                               if (!/^[a-zA-Z0-9]*$/.test(value)) return;
-                              joinPasswordRef.current = value;
                               setJoinPasswordInput(value);
                             }}
                             inputMode="text"
