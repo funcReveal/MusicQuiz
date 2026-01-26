@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   Alert,
   Avatar,
@@ -8,9 +8,7 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
   Chip,
-  Divider,
   Fade,
   LinearProgress,
   Stack,
@@ -63,10 +61,9 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   playlistLoading,
   playlistStage,
   playlistLocked,
-  rooms,
+
   username,
-  currentRoomId,
-  joinPassword,
+
   playlistProgress,
   questionCount,
   onQuestionCountChange,
@@ -74,20 +71,25 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   questionMax = 100,
   questionStep = 5,
   questionControlsEnabled = true,
-  showRoomList = true,
   onRoomNameChange,
   onRoomPasswordChange,
-  onJoinPasswordChange,
   onPlaylistUrlChange,
   onFetchPlaylist,
   onResetPlaylist,
   onCreateRoom,
-  onJoinRoom,
 }) => {
+  const [settingsExpanded, setSettingsExpanded] = React.useState(false);
+  const passwordRef = React.useRef(roomPassword);
+  const isComposingRef = React.useRef(false);
+  const isAsciiAlphaNum = (value: string) => /^[a-zA-Z0-9]*$/.test(value);
   const canCreateRoom = Boolean(
-    username && roomName.trim() && playlistItems.length > 0
+    username && roomName.trim() && playlistItems.length > 0,
   );
   const showPlaylistInput = playlistStage === "input";
+
+  React.useEffect(() => {
+    passwordRef.current = roomPassword;
+  }, [roomPassword]);
   const rowCount = playlistItems.length;
   const canAdjustQuestions =
     questionControlsEnabled && playlistItems.length > 0;
@@ -147,16 +149,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               </p>
             </div>
           </div>
-          {/* <Button
-            size="small"
-            variant="text"
-            color="info"
-            href={item.url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            開啟
-          </Button> */}
         </div>
       </div>
     );
@@ -165,7 +157,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   const adjustQuestionCount = (delta: number) => {
     const next = Math.min(
       questionMax,
-      Math.max(questionMin, questionCount + delta)
+      Math.max(questionMin, questionCount + delta),
     );
     onQuestionCountChange(next);
   };
@@ -176,39 +168,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
         variant="outlined"
         className="w-full bg-slate-900/70 border border-slate-700 text-slate-50"
       >
-        {/* <CardHeader
-          title={
-            <Stack direction="row" spacing={1} alignItems="center">
-              <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-sky-400 to-violet-400 inline-block" />
-              <Typography variant="h6" className="text-slate-50" fontSize={16}>
-                建立房間
-              </Typography>
-              {!showPlaylistInput ? (
-                <Chip
-                  label="播放清單已鎖定"
-                  color="success"
-                  size="small"
-                  variant="outlined"
-                />
-              ) : (
-                <Chip
-                  label="待貼播放清單"
-                  size="small"
-                  variant="outlined"
-                  className="text-slate-200 border-slate-600"
-                />
-              )}
-              {playlistProgress.total > 0 && (
-                <Chip
-                  label={`進度 ${playlistProgress.received}/${playlistProgress.total}`}
-                  size="small"
-                  variant="outlined"
-                  className="text-slate-200 border-slate-600"
-                />
-              )}
-            </Stack>
-          }
-        /> */}
         <CardContent className="space-y-3">
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
@@ -227,12 +186,44 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               size="small"
               label="密碼（選填）"
               slotProps={{ inputLabel: { shrink: true } }}
-              placeholder="留空代表無需密碼"
+              placeholder="留空代表不設密碼"
               value={roomPassword}
-              onChange={(e) => onRoomPasswordChange(e.target.value)}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isComposingRef.current = false;
+                const value = e.currentTarget.value;
+                if (isAsciiAlphaNum(value)) {
+                  passwordRef.current = value;
+                  onRoomPasswordChange(value);
+                } else {
+                  onRoomPasswordChange(passwordRef.current);
+                }
+              }}
+              onBeforeInput={(e) => {
+                const data = e.data ?? "";
+                if (data && !isAsciiAlphaNum(data)) {
+                  e.preventDefault();
+                }
+              }}
+              onPaste={(e) => {
+                const pasted = e.clipboardData.getData("text");
+                if (pasted && !isAsciiAlphaNum(pasted)) {
+                  e.preventDefault();
+                }
+              }}
+              onChange={(e) => {
+                if (isComposingRef.current) return;
+                const value = e.target.value;
+                if (!isAsciiAlphaNum(value)) return;
+                passwordRef.current = value;
+                onRoomPasswordChange(value);
+              }}
               disabled={!username}
               variant="standard"
               autoComplete="off"
+              inputProps={{ inputMode: "text", pattern: "[A-Za-z0-9]*" }}
             />
           </Stack>
 
@@ -240,6 +231,8 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             disabled={!canAdjustQuestions}
             disableGutters
             square
+            expanded={settingsExpanded}
+            onChange={(_, expanded) => setSettingsExpanded(expanded)}
             sx={{
               borderRadius: 1.5,
               backgroundColor: "rgba(15,23,42,0.4)",
@@ -294,12 +287,18 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               }
             >
               <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="body2" className="text-slate-100">
-                  房間設定
-                </Typography>
+                {!settingsExpanded && canAdjustQuestions ? (
+                  <Typography variant="body2" className="text-slate-100">
+                    公開、共 {questionCount} 題
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" className="text-slate-100">
+                    房間設定
+                  </Typography>
+                )}
                 <Fade in={!canAdjustQuestions} timeout={200} unmountOnExit>
                   <Typography variant="caption" className="text-slate-400">
-                    匯入歌單後解鎖
+                    載入清單後解鎖
                   </Typography>
                 </Fade>
               </Stack>
@@ -411,21 +410,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             建立房間
           </Button>
 
-          {/* {!showPlaylistInput ? (
-                <Chip
-                  label="播放清單已鎖定"
-                  color="success"
-                  size="small"
-                  variant="outlined"
-                />
-              ) : (
-                <Chip
-                  label="待貼播放清單"
-                  size="small"
-                  variant="outlined"
-                  className="text-slate-200 border-slate-600"
-                />
-              )} */}
           {playlistProgress.total > 0 && (
             <Chip
               label={`進度 ${playlistProgress.received}/${playlistProgress.total}`}
@@ -440,7 +424,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                 sx={{
                   flex: 1,
                   "& .MuiInput-root.Mui-disabled:before": {
-                    borderBottom: "1px solid rgba(148,163,184,.6)", // disabled 底線樣式
+                    borderBottom: "1px solid rgba(148,163,184,.6)", // disabled underline style
                   },
                 }}
                 slotProps={{ inputLabel: { shrink: true } }}
@@ -491,7 +475,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   播放清單已鎖定
                 </Typography>
                 <Typography variant="body2" className="text-slate-400">
-                  若要換清單，請按「重選播放清單」，並重新貼上。
+                  如需重選，請按「重選播放清單」並重新貼上網址。
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} alignItems="center">
@@ -531,103 +515,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
           )}
         </CardContent>
       </Card>
-
-      {showRoomList && (
-        <Card
-          variant="outlined"
-          className="w-full bg-slate-950/80 border border-slate-800 text-slate-50"
-        >
-          <CardHeader
-            title={
-              <Typography variant="subtitle1" className="text-slate-100">
-                房間列表
-              </Typography>
-            }
-          />
-          <CardContent className="p-0">
-            {rooms.length === 0 ? (
-              <Typography
-                variant="body2"
-                className="text-slate-500 text-center py-4"
-              >
-                目前沒有房間，試著建立一個吧！
-              </Typography>
-            ) : (
-              rooms.map((room) => {
-                const isCurrent = currentRoomId === room.id;
-                return (
-                  <React.Fragment key={room.id}>
-                    <div
-                      className={`px-4 py-3 flex items-center justify-between text-sm ${
-                        isCurrent
-                          ? "bg-slate-900/90 border-l-2 border-l-sky-400"
-                          : "hover:bg-slate-900/70"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium text-slate-100 flex items-center gap-2">
-                          {room.name}
-                          {room.hasPassword && (
-                            <Chip
-                              label="密碼"
-                              size="small"
-                              variant="outlined"
-                              className="text-slate-200 border-slate-600"
-                            />
-                          )}
-                          <Chip
-                            label={`題數 ${
-                              room.gameSettings?.questionCount ?? "-"
-                            }`}
-                            size="small"
-                            variant="outlined"
-                            className="text-slate-200 border-slate-600"
-                          />
-                          {isCurrent && (
-                            <Chip
-                              label="Current"
-                              size="small"
-                              color="info"
-                              variant="outlined"
-                            />
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          Players: {room.playerCount} ・ 清單{" "}
-                          {room.playlistCount} 首 ・{" "}
-                          {new Date(room.createdAt).toLocaleTimeString()}
-                        </div>
-                      </div>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        {room.hasPassword && (
-                          <TextField
-                            size="small"
-                            label="房間密碼"
-                            value={joinPassword}
-                            onChange={(e) =>
-                              onJoinPasswordChange(e.target.value)
-                            }
-                            className="bg-slate-900"
-                          />
-                        )}
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          disabled={!username}
-                          onClick={() => onJoinRoom(room.id, room.hasPassword)}
-                        >
-                          加入
-                        </Button>
-                      </Stack>
-                    </div>
-                    <Divider className="bg-slate-800" />
-                  </React.Fragment>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

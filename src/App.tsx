@@ -5,20 +5,24 @@ import RoomListPage from "./pages/RoomList/RoomListPage";
 import RoomCreatePage from "./pages/RoomCreate/RoomCreatePage";
 import RoomLobbyPage from "./pages/RoomLobby/RoomLobbyPage";
 import InvitedPage from "./pages/Invited/InvitedPage";
+import { RoomProvider } from "./features/Room/RoomProvider";
+import RoomsLayoutShell from "./features/Room/RoomsLayoutShell";
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen bg-slate-900 text-slate-100 justify-center items-start p-4">
+      <RoomProvider>
         <Routes>
-          <Route path="/" element={<Navigate to="/rooms" replace />} />
-          <Route path="/rooms" element={<RoomListPage />} />
-          <Route path="/rooms/create" element={<RoomCreatePage />} />
-          <Route path="/rooms/:roomId" element={<RoomLobbyPage />} />
-          <Route path="/invited/:roomId" element={<InvitedPage />} />
+          <Route element={<RoomsLayoutShell />}>
+            <Route path="/" element={<Navigate to="/rooms" replace />} />
+            <Route path="/rooms" element={<RoomListPage />} />
+            <Route path="/rooms/create" element={<RoomCreatePage />} />
+            <Route path="/rooms/:roomId" element={<RoomLobbyPage />} />
+            <Route path="/invited/:roomId" element={<InvitedPage />} />
+          </Route>
           <Route path="*" element={<Navigate to="/rooms" replace />} />
         </Routes>
-      </div>
+      </RoomProvider>
     </BrowserRouter>
   );
 }

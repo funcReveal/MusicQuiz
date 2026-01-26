@@ -29,7 +29,7 @@ const formatTime = (timestamp: number) => {
   return d.toLocaleTimeString();
 };
 
-interface RoomLobbyProps {
+interface RoomLobbyPanelProps {
   currentRoom: RoomState["room"] | null;
   participants: RoomParticipant[];
   messages: ChatMessage[];
@@ -53,7 +53,7 @@ interface RoomLobbyProps {
   onInvite: () => Promise<void>;
 }
 
-const RoomLobby: React.FC<RoomLobbyProps> = ({
+const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
   currentRoom,
   participants,
   messages,
@@ -512,4 +512,4 @@ const RoomLobby: React.FC<RoomLobbyProps> = ({
   );
 };
 
-export default RoomLobby;
+export default RoomLobbyPanel;

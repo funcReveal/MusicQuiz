@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 
 interface HeaderSectionProps {
   serverUrl: string;
@@ -38,7 +38,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
           MusicQuiz
         </h1>
         <p className="text-1xl text-slate-400">
-          建立房間、邀請朋友，一起猜歌。
+          打造你的音樂房間，和朋友一起猜歌！
         </p>
       </div>
       <div className="text-right text-shadow-md text-slate-400 space-y-1">
@@ -47,7 +47,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
           <span className="text-slate-300 text-[11px]">{serverUrl}</span>
         </div>
         <div>
-          狀態:
+          連線狀態
           <span
             className={
               isConnected
@@ -60,7 +60,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
           </span>
         </div>
         <div>
-          使用者:
+          使用者
           <span className="ml-1 font-medium text-slate-200">
             {displayUsername}
           </span>

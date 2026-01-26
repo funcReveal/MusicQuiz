@@ -11,7 +11,7 @@ import type {
   GameState,
   PlaylistItem,
   RoomState,
-} from "../RoomChatPage/types";
+} from "../../features/Room/types";
 import KeyBindingSettings, {
   useKeyBindings,
 } from "../Setting/components/KeyBindingSettings";
@@ -68,8 +68,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const [playerStart, setPlayerStart] = useState(() =>
     Math.max(
       0,
-      Math.floor((Date.now() + serverOffsetMs - gameState.startedAt) / 1000)
-    )
+      Math.floor((Date.now() + serverOffsetMs - gameState.startedAt) / 1000),
+    ),
   );
   const [showVideo, setShowVideo] = useState(gameState.showVideo ?? true);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
@@ -90,12 +90,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const DRIFT_TOLERANCE_SEC = 1;
   const getServerNowMs = useCallback(
     () => Date.now() + serverOffsetMs,
-    [serverOffsetMs]
+    [serverOffsetMs],
   );
   const computeServerPositionSec = useCallback(
     () =>
       Math.max(0, Math.floor((getServerNowMs() - gameState.startedAt) / 1000)),
-    [gameState.startedAt, getServerNowMs]
+    [gameState.startedAt, getServerNowMs],
   );
   const getEstimatedLocalPositionSec = useCallback(() => {
     const elapsed = (getServerNowMs() - lastSyncMsRef.current) / 1000;
@@ -113,7 +113,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           func: "setVolume",
           args: [safeVolume],
         }),
-        "*"
+        "*",
       );
     } catch (err) {
       console.error("setVolume failed", err);
@@ -131,7 +131,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const trackOrderLength = effectiveTrackOrder.length || playlist.length || 0;
   const boundedCursor = Math.min(
     trackCursor,
-    Math.max(trackOrderLength - 1, 0)
+    Math.max(trackOrderLength - 1, 0),
   );
   const currentTrackIndex =
     gameState.currentIndex ??
@@ -183,7 +183,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           args,
           id: PLAYER_ID,
         }),
-        "*"
+        "*",
       );
     } catch (err) {
       console.error(`${func} failed`, err);
@@ -204,7 +204,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         setIsTrackLoading(false);
       }
     },
-    [getServerNowMs, postCommand, trackLoadKey]
+    [getServerNowMs, postCommand, trackLoadKey],
   );
 
   const startPlayback = useCallback(
@@ -214,7 +214,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       const estimated = getEstimatedLocalPositionSec();
       const needsSeek = Math.abs(estimated - startPos) > DRIFT_TOLERANCE_SEC;
       setPlayerStart((prev) =>
-        Math.abs(prev - startPos) > 0.01 ? startPos : prev
+        Math.abs(prev - startPos) > 0.01 ? startPos : prev,
       );
       lastSyncMsRef.current = getServerNowMs();
 
@@ -233,7 +233,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       postCommand,
       volume,
       waitingToStart,
-    ]
+    ],
   );
 
   const resyncPlaybackToServerTime = useCallback(() => {
@@ -253,7 +253,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     if (lastTrackSessionRef.current !== trackSessionKey) {
       const startSec = Math.max(
         0,
-        Math.floor((getServerNowMs() - gameState.startedAt) / 1000)
+        Math.floor((getServerNowMs() - gameState.startedAt) / 1000),
       );
       setPlayerStart(startSec);
       setSelectedChoice(null);
@@ -456,7 +456,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
       const pressed = e.key.toUpperCase();
       const match = Object.entries(keyBindings).find(
-        ([_, key]) => key.toUpperCase() === pressed
+        ([_, key]) => key.toUpperCase() === pressed,
       );
       if (!match) return;
 
@@ -482,8 +482,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const phaseLabel = isEnded
     ? "已結束"
     : gameState.phase === "guess"
-    ? "猜歌"
-    : "公布答案";
+      ? "猜歌"
+      : "公布答案";
 
   const progressPct =
     phaseEndsAt === gameState.startedAt
@@ -711,7 +711,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                     try {
                       target.postMessage(
                         JSON.stringify({ event: "listening", id: PLAYER_ID }),
-                        "*"
+                        "*",
                       );
                     } catch (err) {
                       console.error("player event binding failed", err);
@@ -731,7 +731,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 <p className="mt-2 text-xs text-slate-300">
                   {waitingToStart
                     ? `遊戲即將開始 · ${Math.ceil(
-                        (gameState.startedAt - nowMs) / 1000
+                        (gameState.startedAt - nowMs) / 1000,
                       )}s`
                     : "猜歌中，影片已隱藏"}
                 </p>
@@ -807,30 +807,30 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                         ? "contained"
                         : "outlined"
                       : isSelected
-                      ? "contained"
-                      : "outlined"
+                        ? "contained"
+                        : "outlined"
                   }
                   color={
                     isReveal
                       ? isCorrect
                         ? "success"
                         : isSelected
-                        ? "error"
-                        : "info"
+                          ? "error"
+                          : "info"
                       : isSelected
-                      ? "info"
-                      : "info"
+                        ? "info"
+                        : "info"
                   }
                   className={`justify-start ${
                     isReveal
                       ? isCorrect
                         ? "bg-emerald-700/40"
                         : isSelected
-                        ? "bg-rose-700/40"
-                        : ""
+                          ? "bg-rose-700/40"
+                          : ""
                       : isSelected
-                      ? "bg-sky-700/30"
-                      : ""
+                        ? "bg-sky-700/30"
+                        : ""
                   } ${isLocked ? "pointer-events-none" : ""}`}
                   disabled={false}
                   onClick={() => {

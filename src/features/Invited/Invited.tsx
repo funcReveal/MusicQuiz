@@ -1,6 +1,6 @@
-import React from "react";
+﻿import React, { useEffect, useRef } from "react";
 
-import type { RoomSummary } from "../../pages/RoomChatPage/types";
+import type { RoomSummary } from "../room/types";
 import {
   Alert,
   Box,
@@ -28,7 +28,7 @@ const InvitedPage: React.FC<InvitedPageProps> = ({
   inviteNotFound,
   onJoinPasswordChange,
   onJoinRoom,
-}) => {
+}) => {\n  const joinPasswordRef = useRef(joinPassword);\n  const isComposingRef = useRef(false);\n\n  useEffect(() => {\n    joinPasswordRef.current = joinPassword;\n  }, [joinPassword]);
   return (
     <Box width={"50%"}>
       <Card
@@ -43,7 +43,7 @@ const InvitedPage: React.FC<InvitedPageProps> = ({
           )}
           {inviteNotFound && (
             <Alert severity="error" variant="outlined">
-              受邀房間不存在或已關閉。
+              受邀房間不存在或已關閉
             </Alert>
           )}
           {inviteRoom && (
@@ -57,9 +57,11 @@ const InvitedPage: React.FC<InvitedPageProps> = ({
                   房間：{inviteRoom.name}
                 </Typography>
                 <Typography variant="body2" className="text-slate-200">
-                  玩家 {inviteRoom.playerCount} ・ 清單{" "}
-                  {inviteRoom.playlistCount} 首{" "}
-                  {inviteRoom.hasPassword ? "（需要密碼）" : "（無需密碼）"}
+                  目前 {inviteRoom.playerCount} 人・清單 {inviteRoom.playlistCount} 首・
+                  {inviteRoom.hasPassword ? "需要密碼" : "無需密碼"}
+                </Typography>
+                <Typography variant="caption" className="text-slate-300">
+                  題數 {inviteRoom.gameSettings?.questionCount ?? "-"}
                 </Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
                   {inviteRoom.hasPassword && (
@@ -68,8 +70,40 @@ const InvitedPage: React.FC<InvitedPageProps> = ({
                       label="房間密碼"
                       variant="outlined"
                       value={joinPassword}
-                      onChange={(e) => onJoinPasswordChange(e.target.value)}
+                      onCompositionStart={() => {
+                        isComposingRef.current = true;
+                      }}
+                      onCompositionEnd={(e) => {
+                        isComposingRef.current = false;
+                        const value = e.currentTarget.value;
+                        if (/^[a-zA-Z0-9]*$/.test(value)) {
+                          joinPasswordRef.current = value;
+                          onJoinPasswordChange(value);
+                        } else {
+                          onJoinPasswordChange(joinPasswordRef.current);
+                        }
+                      }}
+                      onBeforeInput={(e) => {
+                        const data = e.data ?? "";
+                        if (data && !/^[a-zA-Z0-9]*$/.test(data)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const pasted = e.clipboardData.getData("text");
+                        if (pasted && !/^[a-zA-Z0-9]*$/.test(pasted)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (isComposingRef.current) return;
+                        const value = e.target.value;
+                        if (!/^[a-zA-Z0-9]*$/.test(value)) return;
+                        joinPasswordRef.current = value;
+                        onJoinPasswordChange(value);
+                      }}
                       className="bg-slate-950"
+                      inputProps={{ inputMode: "text", pattern: "[A-Za-z0-9]*" }}
                     />
                   )}
                   <Button
@@ -79,7 +113,7 @@ const InvitedPage: React.FC<InvitedPageProps> = ({
                       onJoinRoom(inviteRoom.id, inviteRoom.hasPassword)
                     }
                   >
-                    立即加入
+                    加入房間
                   </Button>
                 </Stack>
               </Stack>

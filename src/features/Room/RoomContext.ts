@@ -1,0 +1,82 @@
+import { createContext } from "react";
+
+import type {
+  ChatMessage,
+  GameState,
+  PlaylistItem,
+  RoomParticipant,
+  RoomState,
+  RoomSummary,
+} from "./types";
+
+export interface RoomContextValue {
+  usernameInput: string;
+  setUsernameInput: (value: string) => void;
+  username: string | null;
+  displayUsername: string;
+  clientId: string;
+  isConnected: boolean;
+  rooms: RoomSummary[];
+  roomNameInput: string;
+  setRoomNameInput: (value: string) => void;
+  roomPasswordInput: string;
+  setRoomPasswordInput: (value: string) => void;
+  joinPasswordInput: string;
+  setJoinPasswordInput: (value: string) => void;
+  currentRoom: RoomState["room"] | null;
+  currentRoomId: string | null;
+  participants: RoomParticipant[];
+  messages: ChatMessage[];
+  messageInput: string;
+  setMessageInput: (value: string) => void;
+  statusText: string | null;
+  setStatusText: (value: string | null) => void;
+  playlistUrl: string;
+  setPlaylistUrl: (value: string) => void;
+  playlistItems: PlaylistItem[];
+  playlistError: string | null;
+  playlistLoading: boolean;
+  playlistStage: "input" | "preview";
+  playlistLocked: boolean;
+  lastFetchedPlaylistId: string | null;
+  playlistViewItems: PlaylistItem[];
+  playlistHasMore: boolean;
+  playlistLoadingMore: boolean;
+  playlistPageCursor: number;
+  playlistPageSize: number;
+  playlistProgress: { received: number; total: number; ready: boolean };
+  questionCount: number;
+  questionMin: number;
+  questionMax: number;
+  questionStep: number;
+  questionMaxLimit: number;
+  inviteRoomId: string | null;
+  inviteNotFound: boolean;
+  isInviteMode: boolean;
+  gameState: GameState | null;
+  gamePlaylist: PlaylistItem[];
+  isGameView: boolean;
+  setIsGameView: (value: boolean) => void;
+  routeRoomResolved: boolean;
+  hostRoomPassword: string | null;
+  serverOffsetMs: number;
+  setInviteRoomId: (value: string | null) => void;
+  setRouteRoomId: (value: string | null) => void;
+  handleSetUsername: () => void;
+  handleCreateRoom: () => Promise<void>;
+  handleJoinRoom: (roomId: string, hasPassword: boolean) => void;
+  handleLeaveRoom: (onLeft?: () => void) => void;
+  handleSendMessage: () => void;
+  handleStartGame: () => void;
+  handleSubmitChoice: (choiceIndex: number) => void;
+  handleFetchPlaylist: () => Promise<void>;
+  handleResetPlaylist: () => void;
+  loadMorePlaylist: () => void;
+  updateQuestionCount: (value: number) => void;
+  syncServerOffset: (serverNow: number) => void;
+  fetchRooms: () => Promise<void>;
+  fetchRoomById: (roomId: string) => Promise<RoomSummary | null>;
+  resetCreateState: () => void;
+}
+
+export const RoomContext = createContext<RoomContextValue | null>(null);

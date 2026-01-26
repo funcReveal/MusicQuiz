@@ -1,13 +1,13 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { io } from "socket.io-client";
-import { useNavigate } from "react-router-dom";
 
-import HeaderSection from "./components/HeaderSection";
-import RoomCreationSection from "./components/RoomCreationSection";
-import UsernameStep from "./components/UsernameStep";
-import GameRoomPage from "../GameRoomPage/GameRoomPage";
-import RoomLobby from "../../features/RoomLobby/RoomLobby";
-import InvitedPage from "../../features/Invited/Invited";
 import type {
   Ack,
   ChatMessage,
@@ -18,7 +18,7 @@ import type {
   RoomState,
   RoomSummary,
 } from "./types";
-import { Button, Snackbar } from "@mui/material";
+import { RoomContext, type RoomContextValue } from "./RoomContext";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 const API_URL = import.meta.env.VITE_API_URL;
@@ -35,18 +35,9 @@ const STORAGE_KEYS = {
   roomPasswordPrefix: "mq_roomPassword:",
 };
 
-interface RoomChatPageProps {
-  routeRoomId?: string | null;
-  inviteId?: string | null;
-  initialView?: "list" | "create";
-}
-
-const RoomChatPage: React.FC<RoomChatPageProps> = ({
-  routeRoomId = null,
-  inviteId = null,
-  initialView = "list",
+export const RoomProvider: React.FC<{ children: ReactNode }> = ({
+  children,
 }) => {
-  const navigate = useNavigate();
   const [usernameInput, setUsernameInput] = useState(
     () => localStorage.getItem(STORAGE_KEYS.username) ?? "",
   );
@@ -64,11 +55,16 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   });
   const [isConnected, setIsConnected] = useState(false);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [roomNameInput, setRoomNameInput] = useState(`${username}'s room`);
+  const [roomNameInput, setRoomNameInput] = useState(() =>
+    username ? `${username}'s room` : "我的房間",
+  );
   const [roomPasswordInput, setRoomPasswordInput] = useState("");
   const [joinPasswordInput, setJoinPasswordInput] = useState("");
   const [currentRoom, setCurrentRoom] = useState<RoomState["room"] | null>(
     null,
+  );
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(() =>
+    localStorage.getItem(STORAGE_KEYS.roomId),
   );
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -106,26 +102,21 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     const initial = Number.isFinite(saved) ? saved : 10;
     return clampQuestionCount(initial, getQuestionMax(0));
   });
-  const [inviteRoomId] = useState<string | null>(() => {
-    if (inviteId) return inviteId;
-    const params = new URLSearchParams(window.location.search);
-    return params.get("roomId");
-  });
+  const [inviteRoomId, setInviteRoomId] = useState<string | null>(null);
   const isInviteMode = Boolean(inviteRoomId);
   const [inviteNotFound, setInviteNotFound] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "create">(initialView);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gamePlaylist, setGamePlaylist] = useState<PlaylistItem[]>([]);
   const [isGameView, setIsGameView] = useState(false);
-  const [routeRoomResolved, setRouteRoomResolved] = useState<boolean>(
-    () => !routeRoomId,
+  const [routeRoomResolved, setRouteRoomResolved] = useState<boolean>(() =>
+    Boolean(currentRoomId),
   );
   const [hostRoomPassword, setHostRoomPassword] = useState<string | null>(null);
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
 
   const socketRef = useRef<ClientSocket | null>(null);
   const currentRoomIdRef = useRef<string | null>(
-    routeRoomId ?? localStorage.getItem(STORAGE_KEYS.roomId),
+    currentRoomId ?? localStorage.getItem(STORAGE_KEYS.roomId),
   );
   const serverOffsetRef = useRef(0);
 
@@ -138,6 +129,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
 
   const persistRoomId = (id: string | null) => {
     currentRoomIdRef.current = id;
+    setCurrentRoomId(id);
     if (id) {
       localStorage.setItem(STORAGE_KEYS.roomId, id);
     } else {
@@ -199,6 +191,65 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
       return null;
     }
   };
+
+  const fetchRooms = useCallback(async () => {
+    if (!API_URL) {
+      setStatusText("尚未設定 API 位置 (VITE_API_URL)");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/rooms`);
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "無法取得房間列表");
+      }
+      const next = (payload?.rooms ?? payload) as RoomSummary[];
+      setRooms(Array.isArray(next) ? next : []);
+      if (isInviteMode && inviteRoomId) {
+        const found = Array.isArray(next)
+          ? next.some((room) => room.id === inviteRoomId)
+          : false;
+        setInviteNotFound(!found);
+        if (!found) {
+          setStatusText("受邀房間不存在或已關閉");
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      setStatusText("取得房間列表失敗");
+    }
+  }, [isInviteMode, inviteRoomId]);
+
+  const fetchRoomById = useCallback(async (roomId: string) => {
+    if (!API_URL) {
+      setStatusText("尚未設定 API 位置 (VITE_API_URL)");
+      return null;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/rooms/${roomId}`);
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        return null;
+      }
+      return (payload?.room ?? null) as RoomSummary | null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!inviteRoomId) {
+      setInviteNotFound(false);
+      return;
+    }
+    void fetchRoomById(inviteRoomId).then((room) => {
+      setInviteNotFound(!room);
+      if (!room) {
+        setStatusText("受邀房間不存在或已關閉");
+      }
+    });
+  }, [fetchRoomById, inviteRoomId]);
 
   const fetchPlaylistPage = (
     roomId: string,
@@ -315,20 +366,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     s.on("connect", () => {
       setIsConnected(true);
       setStatusText("已連線伺服器");
-      s.emit("listRooms", (ack: Ack<RoomSummary[]>) => {
-        if (ack && ack.ok) {
-          setRooms(ack.data);
-          if (isInviteMode) {
-            const found = inviteRoomId
-              ? ack.data.some((r) => r.id === inviteRoomId)
-              : false;
-            setInviteNotFound(!found);
-            if (!found && inviteRoomId) {
-              setStatusText("受邀房間不存在或已關閉");
-            }
-          }
-        }
-      });
+      void fetchRooms();
 
       const storedRoomId = currentRoomIdRef.current;
       if (storedRoomId) {
@@ -372,6 +410,8 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
             }
           },
         );
+      } else {
+        setRouteRoomResolved(true);
       }
     });
 
@@ -394,9 +434,6 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
 
     s.on("roomsUpdated", (updatedRooms: RoomSummary[]) => {
       setRooms(updatedRooms);
-      if (!currentRoom && viewMode === "list") {
-        // keep list visible
-      }
       if (isInviteMode && inviteRoomId) {
         const found = updatedRooms.some((r) => r.id === inviteRoomId);
         setInviteNotFound(!found);
@@ -493,7 +530,15 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
       s.disconnect();
       socketRef.current = null;
     };
-  }, [username, clientId]);
+  }, [
+    username,
+    clientId,
+    fetchCompletePlaylist,
+    fetchRooms,
+    inviteRoomId,
+    isInviteMode,
+    syncServerOffset,
+  ]);
 
   const handleCreateRoom = async () => {
     const s = getSocket();
@@ -583,7 +628,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
           }
         }
       } else {
-        setStatusText(`建立房間失敗：${ack.error}`);
+        setStatusText(`建立房間失敗：{ack.error}`);
       }
     });
   };
@@ -630,13 +675,13 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
           setJoinPasswordInput("");
           setStatusText(`已加入房間：${state.room.name}`);
         } else {
-          setStatusText(`加入房間失敗：${ack.error}`);
+          setStatusText(`加入房間失敗：{ack.error}`);
         }
       },
     );
   };
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = (onLeft?: () => void) => {
     const s = getSocket();
     if (!s || !currentRoom) return;
 
@@ -654,9 +699,9 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
         setPlaylistLoadingMore(false);
         persistRoomId(null);
         setStatusText("已離開房間");
-        navigate("/rooms", { replace: true });
+        onLeft?.();
       } else {
-        setStatusText(`離開房間失敗：${ack.error}`);
+        setStatusText(`離開房間失敗：{ack.error}`);
       }
     });
   };
@@ -673,7 +718,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     s.emit("sendMessage", { content: trimmed }, (ack) => {
       if (!ack) return;
       if (!ack.ok) {
-        setStatusText(`訊息送出失敗：${ack.error}`);
+        setStatusText(`訊息送出失敗：{ack.error}`);
       }
     });
 
@@ -703,13 +748,12 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
           void fetchCompletePlaylist(currentRoom.id).then(setGamePlaylist);
           setStatusText("遊戲即將開始");
         } else {
-          setStatusText(`開始遊戲失敗：${ack.error}`);
+          setStatusText(`開始遊戲失敗：{ack.error}`);
         }
       },
     );
   };
 
-  // 遊戲結束自動回聊天室
   useEffect(() => {
     if (gameState?.status === "ended" && isGameView) {
       setIsGameView(false);
@@ -723,7 +767,7 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     if (gameState.phase !== "guess") return;
     s.emit("submitAnswer", { roomId: currentRoom.id, choiceIndex }, (ack) => {
       if (ack && !ack.ok) {
-        setStatusText(`提交答案失敗：${ack.error}`);
+        setStatusText(`提交答案失敗：{ack.error}`);
       }
     });
   };
@@ -814,6 +858,24 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     setStatusText("已重置播放清單，請重新選擇");
   };
 
+  const resetCreateState = useCallback(() => {
+    setRoomNameInput(username ? `${username}'s room` : "我的房間");
+    setRoomPasswordInput("");
+    setPlaylistUrl("");
+    setPlaylistItems([]);
+    setPlaylistError(null);
+    setPlaylistLoading(false);
+    setPlaylistStage("input");
+    setPlaylistLocked(false);
+    setLastFetchedPlaylistId(null);
+    setPlaylistViewItems([]);
+    setPlaylistHasMore(false);
+    setPlaylistLoadingMore(false);
+    setPlaylistPageCursor(1);
+    setPlaylistPageSize(DEFAULT_PAGE_SIZE);
+    setPlaylistProgress({ received: 0, total: 0, ready: false });
+  }, [username]);
+
   const loadMorePlaylist = useCallback(() => {
     if (!currentRoom) return;
     if (playlistLoadingMore || !playlistHasMore) return;
@@ -827,12 +889,6 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
   ]);
 
   const questionMaxLimit = getQuestionMax(playlistItems.length);
-
-  useEffect(() => {
-    if (currentRoom?.id) {
-      navigate(`/rooms/${currentRoom.id}`, { replace: true });
-    }
-  }, [currentRoom?.id, navigate]);
 
   useEffect(() => {
     if (playlistItems.length === 0) return;
@@ -864,277 +920,132 @@ const RoomChatPage: React.FC<RoomChatPageProps> = ({
     currentRoom?.id,
   ]);
 
-  // 房內路由但尚未載入完成：避免閃到房間列表
-  if (routeRoomId && !currentRoom && !routeRoomResolved) {
-    return (
-      <div className="flex flex-col w-95/100 space-y-4">
-        <HeaderSection
-          serverUrl={SOCKET_URL}
-          isConnected={isConnected}
-          displayUsername={displayUsername}
-        />
-        <div className="w-full md:w-4/5 lg:w-3/5 mx-auto mt-6">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-200">
-            正在載入房間資訊…
-          </div>
-        </div>
-        {statusText && (
-          <Snackbar message={`Status: ${statusText}`} open={true} />
-        )}
-      </div>
-    );
-  }
+  const setRouteRoomId = useCallback((value: string | null) => {
+    currentRoomIdRef.current = value;
+    setCurrentRoomId(value);
+    if (value) {
+      setRouteRoomResolved(false);
+    }
+  }, []);
 
-  // 遊戲模式：全屏顯示遊戲頁（保留 Header 以便退出/提示）
-  if (currentRoom && gameState && isGameView) {
-    return (
-      <div className="flex flex-col w-full min-h-screen space-y-4">
-        <HeaderSection
-          serverUrl={SOCKET_URL}
-          isConnected={isConnected}
-          displayUsername={displayUsername}
-        />
-        <div className="flex w-full justify-center">
-          <GameRoomPage
-            room={currentRoom}
-            gameState={gameState}
-            playlist={
-              gamePlaylist.length > 0 ? gamePlaylist : playlistViewItems
-            }
-            onBack={() => setIsGameView(false)}
-            onSubmitChoice={handleSubmitChoice}
-            participants={participants}
-            meClientId={clientId}
-            messages={messages}
-            messageInput={messageInput}
-            onMessageChange={setMessageInput}
-            onSendMessage={handleSendMessage}
-            username={username}
-            serverOffsetMs={serverOffsetMs}
-          />
-        </div>
-        {statusText && (
-          <Snackbar message={`Status: ${statusText}`} open={true} />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col w-95/100 space-y-4">
-      <HeaderSection
-        serverUrl={SOCKET_URL}
-        isConnected={isConnected}
-        displayUsername={displayUsername}
-      />
-
-      {!username && (
-        <UsernameStep
-          usernameInput={usernameInput}
-          onInputChange={setUsernameInput}
-          onConfirm={handleSetUsername}
-        />
-      )}
-      <div className="flex gap-4 flex-row justify-center">
-        {!currentRoom?.id && username && (
-          <>
-            {isInviteMode ? (
-              <InvitedPage
-                joinPassword={joinPasswordInput}
-                inviteRoom={
-                  inviteRoomId
-                    ? (rooms.find((room) => room.id === inviteRoomId) ?? null)
-                    : null
-                }
-                inviteRoomId={inviteRoomId}
-                inviteNotFound={inviteNotFound}
-                onJoinPasswordChange={setJoinPasswordInput}
-                onJoinRoom={handleJoinRoom}
-              />
-            ) : viewMode === "create" ? (
-              <div className="w-full md:w-full lg:w-3/5">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg text-slate-100 font-semibold">
-                    建立房間
-                  </h2>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => {
-                      // setViewMode("list");
-                      navigate("/rooms", { replace: true });
-                    }}
-                  >
-                    返回列表
-                  </Button>
-                </div>
-                <RoomCreationSection
-                  roomName={roomNameInput}
-                  roomPassword={roomPasswordInput}
-                  playlistUrl={playlistUrl}
-                  playlistItems={playlistItems}
-                  playlistError={playlistError}
-                  playlistLoading={playlistLoading}
-                  playlistStage={playlistStage}
-                  playlistLocked={playlistLocked}
-                  rooms={[]}
-                  username={username}
-                  currentRoomId={currentRoomIdRef.current}
-                  joinPassword={joinPasswordInput}
-                  playlistProgress={playlistProgress}
-                  inviteRoom={null}
-                  inviteRoomId={null}
-                  isInviteMode={false}
-                  inviteNotFound={false}
-                  questionCount={questionCount}
-                  onQuestionCountChange={updateQuestionCount}
-                  questionMin={QUESTION_MIN}
-                  questionMax={questionMaxLimit}
-                  questionStep={QUESTION_STEP}
-                  questionControlsEnabled={playlistItems.length > 0}
-                  onRoomNameChange={setRoomNameInput}
-                  onRoomPasswordChange={setRoomPasswordInput}
-                  onJoinPasswordChange={setJoinPasswordInput}
-                  onPlaylistUrlChange={setPlaylistUrl}
-                  onFetchPlaylist={handleFetchPlaylist}
-                  onResetPlaylist={handleResetPlaylist}
-                  onCreateRoom={handleCreateRoom}
-                  onJoinRoom={handleJoinRoom}
-                  showRoomList={false}
-                />
-              </div>
-            ) : (
-              <div className="w-full md:w-full lg:w-3/5">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg text-slate-100 font-semibold">
-                    房間列表
-                  </h2>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => {
-                      // setViewMode("create");
-                      navigate("/rooms/create", { replace: true });
-                    }}
-                  >
-                    建立房間
-                  </Button>
-                </div>
-                <div className="w-full max-h-80 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/70 divide-y divide-slate-800 shadow-inner shadow-slate-900/60">
-                  {rooms.length === 0 ? (
-                    <div className="flex items-center justify-center min-h-40 text-xl text-slate-300">
-                      目前沒有房間，試著建立一個吧！
-                    </div>
-                  ) : (
-                    rooms.map((room) => {
-                      const isCurrent = currentRoomIdRef.current === room.id;
-                      return (
-                        <div
-                          key={room.id}
-                          className={`px-3 py-2.5 flex items-center justify-between text-sm transition-colors duration-300 ${
-                            isCurrent
-                              ? "bg-slate-900/90 border-l-2 border-l-sky-400"
-                              : "hover:bg-slate-900/70"
-                          }`}
-                        >
-                          <div>
-                            <div className="font-medium text-slate-100 flex items-center gap-2">
-                              {room.name}
-                              {room.hasPassword && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-600">
-                                  密碼
-                                </span>
-                              )}
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 border border-emerald-500/40">
-                                題數 {room.gameSettings?.questionCount ?? "-"}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-400">
-                              Players: {room.playerCount} ・ 清單{" "}
-                              {room.playlistCount} 首 ・{" "}
-                              {new Date(room.createdAt).toLocaleTimeString()}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {room.hasPassword && (
-                              <input
-                                className="w-28 px-2 py-1 text-xs rounded bg-slate-900 border border-slate-700 text-slate-200"
-                                placeholder="房間密碼"
-                                value={joinPasswordInput}
-                                onChange={(e) =>
-                                  setJoinPasswordInput(e.target.value)
-                                }
-                              />
-                            )}
-                            <button
-                              onClick={() =>
-                                handleJoinRoom(room.id, room.hasPassword)
-                              }
-                              disabled={!username}
-                              className="cursor-pointer px-3 py-1.5 text-xs rounded-lg bg-sky-500 hover:bg-sky-600 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,background-color] active:scale-[0.98]"
-                            >
-                              加入
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {currentRoom?.id && (
-          <RoomLobby
-            currentRoom={currentRoom}
-            participants={participants}
-            messages={messages}
-            username={username}
-            roomPassword={hostRoomPassword}
-            messageInput={messageInput}
-            playlistItems={playlistViewItems}
-            playlistHasMore={playlistHasMore}
-            playlistLoadingMore={playlistLoadingMore}
-            playlistProgress={playlistProgress}
-            isHost={currentRoom.hostClientId === clientId}
-            gameState={gameState}
-            canStartGame={playlistProgress.ready}
-            onLeave={handleLeaveRoom}
-            onInputChange={setMessageInput}
-            onSend={handleSendMessage}
-            onLoadMorePlaylist={loadMorePlaylist}
-            onStartGame={handleStartGame}
-            onOpenGame={() => setIsGameView(true)}
-            onInvite={async () => {
-              if (!currentRoom) return;
-              const url = new URL(window.location.href);
-              url.pathname = `/invited/${currentRoom.id}`;
-              url.search = "";
-              const inviteText = url.toString();
-              if (navigator.clipboard?.writeText) {
-                try {
-                  await navigator.clipboard.writeText(inviteText);
-                  setStatusText("已複製邀請連結");
-                } catch (err) {
-                  console.error(err);
-                  setStatusText("複製邀請連結失敗");
-                }
-              } else {
-                setStatusText(inviteText);
-              }
-            }}
-          />
-        )}
-      </div>
-
-      {/* {statusText && (
-        // <div className="text-xs text-slate-400 mt-1">Status: {statusText}</div>
-        <Snackbar message={`Status: ${statusText}`} open={true} />
-      )} */}
-    </div>
+  const value = useMemo<RoomContextValue>(
+    () => ({
+      usernameInput,
+      setUsernameInput,
+      username,
+      displayUsername,
+      clientId,
+      isConnected,
+      rooms,
+      roomNameInput,
+      setRoomNameInput,
+      roomPasswordInput,
+      setRoomPasswordInput,
+      joinPasswordInput,
+      setJoinPasswordInput,
+      currentRoom,
+      currentRoomId,
+      participants,
+      messages,
+      messageInput,
+      setMessageInput,
+      statusText,
+      setStatusText,
+      playlistUrl,
+      setPlaylistUrl,
+      playlistItems,
+      playlistError,
+      playlistLoading,
+      playlistStage,
+      playlistLocked,
+      lastFetchedPlaylistId,
+      playlistViewItems,
+      playlistHasMore,
+      playlistLoadingMore,
+      playlistPageCursor,
+      playlistPageSize,
+      playlistProgress,
+      questionCount,
+      questionMin: QUESTION_MIN,
+      questionMax: QUESTION_MAX,
+      questionStep: QUESTION_STEP,
+      questionMaxLimit,
+      inviteRoomId,
+      inviteNotFound,
+      isInviteMode,
+      gameState,
+      gamePlaylist,
+      isGameView,
+      setIsGameView,
+      routeRoomResolved,
+      hostRoomPassword,
+      serverOffsetMs,
+      setInviteRoomId,
+      setRouteRoomId,
+      handleSetUsername,
+      handleCreateRoom,
+      handleJoinRoom,
+      handleLeaveRoom,
+      handleSendMessage,
+      handleStartGame,
+      handleSubmitChoice,
+      handleFetchPlaylist,
+      handleResetPlaylist,
+      loadMorePlaylist,
+      updateQuestionCount,
+      syncServerOffset,
+      fetchRooms,
+      fetchRoomById,
+      resetCreateState,
+    }),
+    [
+      usernameInput,
+      username,
+      displayUsername,
+      clientId,
+      isConnected,
+      rooms,
+      roomNameInput,
+      roomPasswordInput,
+      joinPasswordInput,
+      currentRoom,
+      currentRoomId,
+      participants,
+      messages,
+      messageInput,
+      statusText,
+      setStatusText,
+      playlistUrl,
+      playlistItems,
+      playlistError,
+      playlistLoading,
+      playlistStage,
+      playlistLocked,
+      lastFetchedPlaylistId,
+      playlistViewItems,
+      playlistHasMore,
+      playlistLoadingMore,
+      playlistPageCursor,
+      playlistPageSize,
+      playlistProgress,
+      questionCount,
+      questionMaxLimit,
+      inviteRoomId,
+      inviteNotFound,
+      isInviteMode,
+      gameState,
+      gamePlaylist,
+      isGameView,
+      routeRoomResolved,
+      hostRoomPassword,
+      serverOffsetMs,
+      setInviteRoomId,
+      setRouteRoomId,
+      fetchRooms,
+      fetchRoomById,
+      resetCreateState,
+    ],
   );
-};
 
-export default RoomChatPage;
+  return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
+};
