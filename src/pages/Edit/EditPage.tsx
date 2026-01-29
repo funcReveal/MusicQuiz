@@ -214,6 +214,8 @@ const EditPage = () => {
   const navigate = useNavigate();
 
   const {
+    authToken,
+    authUser,
     displayUsername,
     clientId,
     username,
@@ -265,6 +267,12 @@ const EditPage = () => {
   const [volume, setVolume] = useState(50);
   const [ytReady, setYtReady] = useState(false);
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const ownerId = authUser?.id ?? null;
+  const isReadOnly = !authToken;
+  const workerAuthHeaders = useMemo(
+    () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    [authToken],
+  );
 
   const selectedItem = playlistItems[selectedIndex] ?? null;
   const durationSec = useMemo(() => {
@@ -322,7 +330,7 @@ const EditPage = () => {
   }, [clientId, displayUsername]);
 
   useEffect(() => {
-    if (!WORKER_API_URL || !clientId) return;
+    if (!WORKER_API_URL || !ownerId || !authToken) return;
     let active = true;
 
     const ensureAndLoad = async () => {
@@ -331,22 +339,27 @@ const EditPage = () => {
       try {
         await fetch(`${WORKER_API_URL}/users`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
           body: JSON.stringify({
-            id: clientId,
+            id: ownerId,
             display_name:
-              displayUsername && displayUsername !== TEXT.notSet
-                ? displayUsername
-                : "Guest",
-            provider: "guest",
-            provider_user_id: clientId,
+              authUser?.display_name && authUser.display_name !== TEXT.notSet
+                ? authUser.display_name
+                : displayUsername && displayUsername !== TEXT.notSet
+                  ? displayUsername
+                  : "Guest",
+            provider: authUser?.provider ?? "google",
+            provider_user_id: authUser?.provider_user_id ?? ownerId,
+            email: authUser?.email ?? null,
+            avatar_url: authUser?.avatar_url ?? null,
           }),
         });
 
         const res = await fetch(
           `${WORKER_API_URL}/collections?owner_id=${encodeURIComponent(
-            clientId,
+            ownerId,
           )}&pageSize=50`,
+          { headers: { ...workerAuthHeaders } },
         );
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
@@ -375,10 +388,21 @@ const EditPage = () => {
     return () => {
       active = false;
     };
-  }, [WORKER_API_URL, clientId, displayUsername]);
+  }, [
+    WORKER_API_URL,
+    ownerId,
+    authToken,
+    displayUsername,
+    authUser?.display_name,
+    authUser?.provider,
+    authUser?.provider_user_id,
+    authUser?.email,
+    authUser?.avatar_url,
+    workerAuthHeaders,
+  ]);
 
   useEffect(() => {
-    if (!WORKER_API_URL || !activeCollectionId) return;
+    if (!WORKER_API_URL || !activeCollectionId || !authToken) return;
     let active = true;
 
     const loadItems = async () => {
@@ -387,6 +411,7 @@ const EditPage = () => {
       try {
         const res = await fetch(
           `${WORKER_API_URL}/collections/${activeCollectionId}/items?pageSize=200`,
+          { headers: { ...workerAuthHeaders } },
         );
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
@@ -412,7 +437,7 @@ const EditPage = () => {
     return () => {
       active = false;
     };
-  }, [WORKER_API_URL, activeCollectionId]);
+  }, [WORKER_API_URL, activeCollectionId, authToken, workerAuthHeaders]);
 
   useEffect(() => {
     if (!pendingPlaylistImport) return;
@@ -728,7 +753,8 @@ const EditPage = () => {
   };
 
   const syncItemsToDb = async (collectionId: string) => {
-    if (!WORKER_API_URL) return;
+    if (!WORKER_API_URL || !authToken) return;
+    const jsonHeaders = { "Content-Type": "application/json", ...workerAuthHeaders };
     const updatePayloads = playlistItems.map((item, idx) => ({
       localId: item.localId,
       id: item.dbId,
@@ -747,7 +773,7 @@ const EditPage = () => {
         toUpdate.map((item) =>
           fetch(`${WORKER_API_URL}/collection-items/${item.id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: jsonHeaders,
             body: JSON.stringify({
               sort: item.sort,
               video_id: item.video_id ?? null,
@@ -773,7 +799,7 @@ const EditPage = () => {
         `${WORKER_API_URL}/collections/${collectionId}/items`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonHeaders,
           body: JSON.stringify({ items: insertItems }),
         },
       );
@@ -797,6 +823,7 @@ const EditPage = () => {
         pendingDeleteIds.map((id) =>
           fetch(`${WORKER_API_URL}/collection-items/${id}`, {
             method: "DELETE",
+            headers: { ...workerAuthHeaders },
           }),
         ),
       );
@@ -805,9 +832,9 @@ const EditPage = () => {
   };
 
   const handleSaveCollection = async () => {
-    if (!WORKER_API_URL) {
+    if (!WORKER_API_URL || !authToken || !ownerId) {
       setSaveStatus("error");
-      setSaveError("API URL is not configured");
+      setSaveError("請先登入後再儲存");
       return;
     }
     if (!collectionTitle.trim()) {
@@ -825,9 +852,9 @@ const EditPage = () => {
       if (!collectionId) {
         const res = await fetch(`${WORKER_API_URL}/collections`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
           body: JSON.stringify({
-            owner_id: clientId,
+            owner_id: ownerId,
             title: collectionTitle.trim(),
             description: null,
             visibility: "private",
@@ -846,7 +873,7 @@ const EditPage = () => {
       } else {
         await fetch(`${WORKER_API_URL}/collections/${collectionId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
           body: JSON.stringify({ title: collectionTitle.trim() }),
         });
         setCollections((prev) =>
@@ -895,12 +922,18 @@ const EditPage = () => {
             variant="contained"
             size="small"
             onClick={handleSaveCollection}
-            disabled={saveStatus === "saving"}
+            disabled={saveStatus === "saving" || isReadOnly}
           >
             {saveStatus === "saving" ? SAVING_LABEL : SAVE_LABEL}
           </Button>
         </div>
       </div>
+      {!authToken && (
+        <div className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-200">
+          請先使用 Google 登入後再編輯收藏庫。
+        </div>
+      )}
+      <div className={isReadOnly ? "pointer-events-none opacity-60" : ""}>
       {collectionsLoading && (
         <div className="text-xs text-slate-400">{LOADING_LABEL}</div>
       )}
@@ -1381,6 +1414,7 @@ const EditPage = () => {
           )}
         </Box>
       </Box>
+      </div>
     </div>
     // </div>
   );

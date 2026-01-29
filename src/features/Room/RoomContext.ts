@@ -9,7 +9,21 @@ import type {
   RoomSummary,
 } from "./types";
 
+export type AuthUser = {
+  id: string;
+  email?: string | null;
+  provider?: string;
+  provider_user_id?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+};
+
 export interface RoomContextValue {
+  authToken: string | null;
+  authUser: AuthUser | null;
+  authLoading: boolean;
+  loginWithGoogle: () => void;
+  logout: () => void;
   usernameInput: string;
   setUsernameInput: (value: string) => void;
   username: string | null;

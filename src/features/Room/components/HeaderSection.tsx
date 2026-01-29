@@ -1,3 +1,4 @@
+import { ExpandMore } from "@mui/icons-material";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -5,14 +6,29 @@ interface HeaderSectionProps {
   serverUrl: string;
   isConnected: boolean;
   displayUsername: string;
+  authUser?: {
+    id: string;
+    email?: string | null;
+    display_name?: string | null;
+    avatar_url?: string | null;
+  } | null;
+  authLoading?: boolean;
+  onLogin?: () => void;
+  onLogout?: () => void;
 }
 
 const HeaderSection: React.FC<HeaderSectionProps> = ({
   serverUrl,
   isConnected,
   displayUsername,
+  authUser,
+  authLoading = false,
+  onLogin,
+  onLogout,
 }) => {
   const navigate = useNavigate();
+  const authLabel = authUser?.display_name || authUser?.id || displayUsername;
+  const authSubLabel = authUser?.email ?? null;
 
   async function checkPing() {
     const start = performance.now();
@@ -78,7 +94,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
             {isConnected ? "Connected" : "Disconnected"}
           </span>
         </div>
-        <div className="flex items-center justify-end gap-1" ref={menuRef}>
+        <div className="flex items-center justify-end gap-2" ref={menuRef}>
           <span>使用者:</span>
           <div className="relative inline-flex items-center">
             <button
@@ -88,17 +104,59 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
               aria-haspopup="menu"
               aria-expanded={isMenuOpen}
             >
-              <span>{displayUsername}</span>
+              {authUser?.avatar_url ? (
+                <img
+                  src={authUser.avatar_url}
+                  alt={authLabel}
+                  className="h-5 w-5 rounded-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-200">
+                  {authLabel?.[0]?.toUpperCase() ?? "?"}
+                </span>
+              )}
+              <span>{authLabel}</span>
               <span
                 className={`text-[10px] transition-transform ${
                   isMenuOpen ? "rotate-180" : ""
                 }`}
               >
-                ▼
+                <ExpandMore />
               </span>
             </button>
             {isMenuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-36 rounded-lg border border-slate-700 bg-slate-950/95 shadow-lg">
+              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-950/95 shadow-lg">
+                {authSubLabel && (
+                  <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-800">
+                    {authSubLabel}
+                  </div>
+                )}
+
+                {authUser ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onLogout?.();
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                  >
+                    Google 登出
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onLogin?.();
+                    }}
+                    disabled={authLoading}
+                    className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70 disabled:opacity-60"
+                  >
+                    {authLoading ? "登入中..." : "Google 登入"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

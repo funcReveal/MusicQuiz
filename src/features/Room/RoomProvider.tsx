@@ -18,7 +18,11 @@ import type {
   RoomState,
   RoomSummary,
 } from "./types";
-import { RoomContext, type RoomContextValue } from "./RoomContext";
+import {
+  RoomContext,
+  type RoomContextValue,
+  type AuthUser,
+} from "./RoomContext";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 const API_URL = import.meta.env.VITE_API_URL;
@@ -34,6 +38,8 @@ const STORAGE_KEYS = {
   roomId: "mq_roomId",
   questionCount: "mq_questionCount",
   roomPasswordPrefix: "mq_roomPassword:",
+  authToken: "mq_authToken",
+  authUser: "mq_authUser",
 };
 
 export const RoomProvider: React.FC<{ children: ReactNode }> = ({
@@ -45,6 +51,19 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const [username, setUsername] = useState<string | null>(
     () => localStorage.getItem(STORAGE_KEYS.username) ?? null,
   );
+  const [authToken, setAuthToken] = useState<string | null>(
+    () => localStorage.getItem(STORAGE_KEYS.authToken),
+  );
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    const raw = localStorage.getItem(STORAGE_KEYS.authUser);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as AuthUser;
+    } catch {
+      return null;
+    }
+  });
+  const [authLoading, setAuthLoading] = useState(false);
   const [clientId] = useState<string>(() => {
     const existing = localStorage.getItem(STORAGE_KEYS.clientId);
     if (existing) return existing;
@@ -120,12 +139,61 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     currentRoomId ?? localStorage.getItem(STORAGE_KEYS.roomId),
   );
   const serverOffsetRef = useRef(0);
+  const googleCodeClientRef = useRef<any>(null);
+  const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
+  const handledRedirectRef = useRef(false);
 
   const displayUsername = useMemo(() => username ?? "(未設定)", [username]);
 
   const persistUsername = (name: string) => {
     setUsername(name);
     localStorage.setItem(STORAGE_KEYS.username, name);
+  };
+
+  const persistAuth = (token: string, user: AuthUser) => {
+    setAuthToken(token);
+    setAuthUser(user);
+    localStorage.setItem(STORAGE_KEYS.authToken, token);
+    localStorage.setItem(STORAGE_KEYS.authUser, JSON.stringify(user));
+    if (user.display_name) {
+      persistUsername(user.display_name);
+    }
+  };
+
+  const clearAuth = () => {
+    setAuthToken(null);
+    setAuthUser(null);
+    localStorage.removeItem(STORAGE_KEYS.authToken);
+    localStorage.removeItem(STORAGE_KEYS.authUser);
+    setUsername(null);
+    localStorage.removeItem(STORAGE_KEYS.username);
+    setUsernameInput("");
+  };
+
+  const ensureGoogleScript = () => {
+    if (window.google?.accounts?.oauth2) return Promise.resolve();
+    if (googleScriptPromiseRef.current) return googleScriptPromiseRef.current;
+    googleScriptPromiseRef.current = new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector(
+        "script[data-google-identity]",
+      ) as HTMLScriptElement | null;
+      if (existing) {
+        existing.addEventListener("load", () => resolve());
+        existing.addEventListener("error", () =>
+          reject(new Error("Failed to load Google script")),
+        );
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleIdentity = "true";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Google script"));
+      document.head.appendChild(script);
+    });
+    return googleScriptPromiseRef.current;
   };
 
   const persistRoomId = (id: string | null) => {
@@ -171,7 +239,114 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     setStatusText(null);
   };
 
+  const exchangeGoogleCode = useCallback(
+    async (code: string, redirectUri: string) => {
+      if (!API_URL) {
+        setStatusText("尚未設定 API 位置 (VITE_API_URL)");
+        return;
+      }
+      setAuthLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/api/auth/google`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, redirectUri }),
+        });
+        const payload = await res.json().catch(() => null);
+        if (!res.ok || !payload?.token) {
+          throw new Error(payload?.error ?? "Google 登入失敗");
+        }
+        persistAuth(payload.token, payload.user as AuthUser);
+        setStatusText("Google 登入成功");
+      } catch (error) {
+        setStatusText(
+          error instanceof Error ? error.message : "Google 登入失敗",
+        );
+      } finally {
+        setAuthLoading(false);
+      }
+    },
+    [persistAuth, setStatusText],
+  );
+
+  const loginWithGoogle = useCallback(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setStatusText("尚未設定 Google Client ID");
+      return;
+    }
+    const redirectUri =
+      import.meta.env.VITE_GOOGLE_REDIRECT_URI ?? window.location.origin;
+    const isMobile =
+      /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(
+        navigator.userAgent,
+      ) || window.matchMedia("(max-width: 768px)").matches;
+    const uxMode = isMobile ? "redirect" : "popup";
+
+    ensureGoogleScript()
+      .then(() => {
+        const codeClient =
+          googleCodeClientRef.current ??
+          window.google.accounts.oauth2.initCodeClient({
+            client_id: clientId,
+            scope: "openid email profile",
+            ux_mode: uxMode,
+            redirect_uri: redirectUri,
+            callback: (response: { code?: string; error?: string }) => {
+              if (!response?.code) {
+                setStatusText(response?.error ?? "Google 登入失敗");
+                return;
+              }
+              exchangeGoogleCode(response.code, redirectUri);
+            },
+          });
+        googleCodeClientRef.current = codeClient;
+        codeClient.requestCode();
+      })
+      .catch((error) => {
+        setStatusText(
+          error instanceof Error ? error.message : "Google 登入失敗",
+        );
+      });
+  }, [exchangeGoogleCode, setStatusText]);
+
+  const logout = useCallback(() => {
+    clearAuth();
+    setStatusText("已登出");
+  }, []);
+
   const getSocket = () => socketRef.current;
+
+  useEffect(() => {
+    if (authUser?.display_name && !username) {
+      persistUsername(authUser.display_name);
+    }
+  }, [authUser?.display_name, username]);
+
+  useEffect(() => {
+    if (handledRedirectRef.current) return;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    const error = url.searchParams.get("error");
+    if (!code && !error) return;
+    handledRedirectRef.current = true;
+
+    url.searchParams.delete("code");
+    url.searchParams.delete("scope");
+    url.searchParams.delete("authuser");
+    url.searchParams.delete("prompt");
+    url.searchParams.delete("error");
+    window.history.replaceState({}, document.title, url.toString());
+
+    if (error) {
+      setStatusText(error);
+      return;
+    }
+
+    const redirectUri =
+      import.meta.env.VITE_GOOGLE_REDIRECT_URI ?? window.location.origin;
+    void exchangeGoogleCode(code, redirectUri);
+  }, [exchangeGoogleCode, setStatusText]);
 
   const syncServerOffset = useCallback((serverNow: number) => {
     const offset = serverNow - Date.now();
@@ -357,9 +532,10 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     if (!username) return;
 
+    const authPayload = authToken ? { token: authToken, clientId } : { clientId };
     const s = io(SOCKET_URL, {
       transports: ["websocket"],
-      auth: { clientId },
+      auth: authPayload,
     });
 
     socketRef.current = s;
@@ -534,6 +710,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   }, [
     username,
     clientId,
+    authToken,
     fetchCompletePlaylist,
     fetchRooms,
     inviteRoomId,
@@ -931,6 +1108,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
 
   const value = useMemo<RoomContextValue>(
     () => ({
+      authToken,
+      authUser,
+      authLoading,
+      loginWithGoogle,
+      logout,
       usernameInput,
       setUsernameInput,
       username,
@@ -1000,6 +1182,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       resetCreateState,
     }),
     [
+      authToken,
+      authUser,
+      authLoading,
+      loginWithGoogle,
+      logout,
       usernameInput,
       username,
       displayUsername,

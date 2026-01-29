@@ -8,6 +8,10 @@ import { useRoom } from "./useRoom";
 
 const RoomsLayoutShell: React.FC = () => {
   const {
+    authLoading,
+    authUser,
+    loginWithGoogle,
+    logout,
     displayUsername,
     isConnected,
     statusText,
@@ -24,6 +28,10 @@ const RoomsLayoutShell: React.FC = () => {
           serverUrl={import.meta.env.VITE_SOCKET_URL}
           isConnected={isConnected}
           displayUsername={displayUsername}
+          authUser={authUser}
+          authLoading={authLoading}
+          onLogin={loginWithGoogle}
+          onLogout={logout}
         />
 
         {!username && (
