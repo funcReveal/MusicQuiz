@@ -172,11 +172,11 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
                     type="button"
                     onClick={() => {
                       setIsMenuOpen(false);
-                      navigate("/edit");
+                      navigate("/collections");
                     }}
                     className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
                   >
-                    檢視收藏庫
+                    自己的收藏庫
                   </button>
                 )}
               </div>

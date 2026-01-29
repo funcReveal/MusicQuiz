@@ -1,13 +1,12 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { io } from "socket.io-client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { Box, Button, Slider } from "@mui/material";
 import { useRoom } from "../../features/Room/useRoom";
 import type { PlaylistItem } from "../../features/Room/types";
+import CollectionSelect from "./components/CollectionSelect";
 
 const WORKER_API_URL = import.meta.env.VITE_WORKER_API_URL;
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 declare global {
   interface Window {
@@ -67,28 +66,35 @@ type DbCollectionItem = {
   collection_id: string;
   sort: number;
   video_id: string | null;
+  duration_sec?: number | null;
   start_sec: number;
   end_sec: number | null;
   answer_text: string;
 };
 
-const ADD_PLAYLIST_LABEL = "\u65b0\u589e\u6e05\u55ae";
-const ADD_ITEM_LABEL = "\u65b0\u589e";
-const START_TIME_LABEL = "\u958b\u59cb\u6642\u9593 (mm:ss)";
-const END_TIME_LABEL = "\u7d50\u675f\u6642\u9593 (mm:ss)";
-const PLAY_LABEL = "\u64ad\u653e";
-const PAUSE_LABEL = "\u66ab\u505c";
-const VOLUME_LABEL = "\u97f3\u91cf";
-const TOTAL_DURATION_LABEL = "\u7e3d\u6642\u9577";
-const DUPLICATE_SONG_ERROR = "\u66f2\u76ee\u5df2\u5b58\u5728";
-const CLIP_DURATION_LABEL = "\u64ad\u653e\u6642\u9577";
-const SAVE_LABEL = "\u5132\u5b58";
-const SAVING_LABEL = "\u5132\u5b58\u4e2d";
-const SAVE_ERROR_LABEL = "\u5132\u5b58\u5931\u6557";
-const SAVED_LABEL = "\u5df2\u5132\u5b58";
-const LOADING_LABEL = "\u8f09\u5165\u4e2d";
-const COLLECTION_COUNT_LABEL = "\u6536\u85cf\u5eab\u6578\u91cf";
-const COLLECTION_SELECT_LABEL = "\u6536\u85cf\u5eab\u6e05\u55ae";
+const ADD_PLAYLIST_LABEL = "新增清單";
+const ADD_ITEM_LABEL = "新增";
+const START_TIME_LABEL = "開始時間 (mm:ss)";
+const END_TIME_LABEL = "結束時間 (mm:ss)";
+const PLAY_LABEL = "播放";
+const PAUSE_LABEL = "暫停";
+const VOLUME_LABEL = "音量";
+const TOTAL_DURATION_LABEL = "總時長";
+const DUPLICATE_SONG_ERROR = "曲目已存在";
+const CLIP_DURATION_LABEL = "播放時長";
+const SAVE_LABEL = "儲存";
+const SAVING_LABEL = "儲存中";
+const SAVE_ERROR_LABEL = "儲存失敗";
+const SAVED_LABEL = "已儲存";
+const LOADING_LABEL = "載入中";
+const AUTO_SAVE_SUCCESS_LABEL = "自動保存成功";
+const AUTO_SAVE_ERROR_LABEL = "自動保存失敗";
+const UNSAVED_PROMPT = "尚未儲存，確定要離開嗎？";
+const COLLECTION_COUNT_LABEL = "收藏庫數量";
+const COLLECTION_SELECT_LABEL = "收藏庫清單";
+const NEW_COLLECTION_LABEL = "建立新收藏庫";
+const EDIT_VOLUME_STORAGE_KEY = "mq_edit_volume";
+const LEGACY_VOLUME_STORAGE_KEY = "mq_volume";
 
 const DEFAULT_DURATION_SEC = 30;
 
@@ -150,10 +156,15 @@ const buildEditableItemsFromDb = (items: DbCollectionItem[]): EditableItem[] =>
   items.map((item) => {
     const videoId = item.video_id ?? "";
     const startSec = item.start_sec ?? 0;
-    const endSec =
+    const rawDuration =
+      item.duration_sec && item.duration_sec > 0 ? item.duration_sec : null;
+    const maxDuration =
+      rawDuration ?? Math.max(1, startSec + DEFAULT_DURATION_SEC);
+    const endFromDb =
       item.end_sec === null || item.end_sec === undefined
         ? Math.max(1, startSec + DEFAULT_DURATION_SEC)
         : Math.max(1, item.end_sec);
+    const endSec = Math.min(Math.max(endFromDb, startSec + 1), maxDuration);
     return {
       localId: createLocalId(),
       dbId: item.id,
@@ -161,7 +172,7 @@ const buildEditableItemsFromDb = (items: DbCollectionItem[]): EditableItem[] =>
       url: videoId ? videoUrlFromId(videoId) : "",
       thumbnail: videoId ? thumbnailFromId(videoId) : undefined,
       uploader: "",
-      duration: undefined,
+      duration: rawDuration ? formatSeconds(rawDuration) : undefined,
       startSec,
       endSec,
       answerText: item.answer_text ?? "",
@@ -212,6 +223,7 @@ const parseTimeInput = (value: string) => {
 
 const EditPage = () => {
   const navigate = useNavigate();
+  const { collectionId } = useParams<{ collectionId?: string }>();
 
   const {
     authToken,
@@ -228,8 +240,6 @@ const EditPage = () => {
     setPlaylistUrl,
   } = useRoom();
 
-  // const [isConnected, setIsConnected] = useState(false);
-
   const [collections, setCollections] = useState<DbCollection[]>([]);
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(
     null,
@@ -242,6 +252,14 @@ const EditPage = () => {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [autoSaveNotice, setAutoSaveNotice] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const dirtyCounterRef = useRef(0);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
 
   const [collectionTitle, setCollectionTitle] = useState("");
@@ -258,13 +276,21 @@ const EditPage = () => {
     formatSeconds(DEFAULT_DURATION_SEC),
   );
   const [answerText, setAnswerText] = useState("");
-  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<any>(null);
+  const playRequestedRef = useRef(false);
   const hasResetPlaylistRef = useRef(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(50);
+  const [volume, setVolume] = useState(() => {
+    if (typeof window === "undefined") return 50;
+    const stored =
+      window.localStorage.getItem(EDIT_VOLUME_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_VOLUME_STORAGE_KEY);
+    const parsed = stored ? Number(stored) : NaN;
+    if (!Number.isFinite(parsed)) return 50;
+    return Math.min(100, Math.max(0, parsed));
+  });
   const [ytReady, setYtReady] = useState(false);
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const ownerId = authUser?.id ?? null;
@@ -273,6 +299,45 @@ const EditPage = () => {
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     [authToken],
   );
+
+  if (!authToken) {
+    return (
+      <div className="flex flex-col w-95/100 space-y-4">
+        <div className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-4 text-sm text-amber-200">
+          請先使用 Google 登入後再編輯收藏庫。
+        </div>
+        <div className="text-sm text-slate-300">
+          目前為訪客模式，無法使用收藏庫功能。
+        </div>
+        <div>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate("/rooms", { replace: true })}
+          >
+            {TEXT.backRooms}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (collectionId) {
+      setActiveCollectionId(collectionId);
+    } else {
+      setActiveCollectionId(null);
+      setCollectionTitle("");
+    }
+    setPlaylistItems([]);
+    setPendingDeleteIds([]);
+    setSelectedIndex(0);
+    setHasUnsavedChanges(false);
+    setSaveStatus("idle");
+    setSaveError(null);
+    setAutoSaveNotice(null);
+    dirtyCounterRef.current = 0;
+  }, [collectionId]);
 
   const selectedItem = playlistItems[selectedIndex] ?? null;
   const durationSec = useMemo(() => {
@@ -305,6 +370,32 @@ const EditPage = () => {
     ? Math.max(0, selectedItem.endSec - selectedItem.startSec)
     : 0;
 
+  const markDirty = () => {
+    dirtyCounterRef.current += 1;
+    setHasUnsavedChanges(true);
+    if (saveStatus !== "idle") {
+      setSaveStatus("idle");
+    }
+    if (saveError) {
+      setSaveError(null);
+    }
+  };
+
+  const showAutoSaveNotice = (type: "success" | "error", message: string) => {
+    setAutoSaveNotice({ type, message });
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      setAutoSaveNotice(null);
+    }, 2500);
+  };
+
+  const confirmLeave = () => {
+    if (!hasUnsavedChanges) return true;
+    return window.confirm(UNSAVED_PROMPT);
+  };
+
   useEffect(() => {
     if (hasResetPlaylistRef.current) return;
     hasResetPlaylistRef.current = true;
@@ -312,22 +403,22 @@ const EditPage = () => {
   }, [handleResetPlaylist]);
 
   useEffect(() => {
-    if (!SOCKET_URL) return;
-    if (!displayUsername || displayUsername === TEXT.notSet) return;
-
-    const socket = io(SOCKET_URL, {
-      transports: ["websocket"],
-      auth: { clientId },
-    });
-
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
-
     return () => {
-      socket.removeAllListeners();
-      socket.disconnect();
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
     };
-  }, [clientId, displayUsername]);
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     if (!WORKER_API_URL || !ownerId || !authToken) return;
@@ -368,11 +459,12 @@ const EditPage = () => {
         const items = (payload?.data?.items ?? []) as DbCollection[];
         if (!active) return;
         setCollections(items);
-        if (items.length > 0) {
-          setActiveCollectionId(items[0].id);
-          setCollectionTitle(items[0].title ?? "");
+        if (collectionId) {
+          const matched = items.find((item) => item.id === collectionId);
+          setActiveCollectionId(collectionId);
+          setCollectionTitle(matched?.title ?? "");
         } else {
-          setActiveCollectionId(null);
+          setCollectionTitle("");
         }
       } catch (error) {
         if (!active) return;
@@ -399,6 +491,7 @@ const EditPage = () => {
     authUser?.email,
     authUser?.avatar_url,
     workerAuthHeaders,
+    collectionId,
   ]);
 
   useEffect(() => {
@@ -419,10 +512,15 @@ const EditPage = () => {
         }
         const items = (payload?.data?.items ?? []) as DbCollectionItem[];
         if (!active) return;
-        setPlaylistItems(buildEditableItemsFromDb(items));
+        const baseItems = buildEditableItemsFromDb(items);
+        setPlaylistItems(baseItems);
         setPlaylistAddError(null);
         setPendingDeleteIds([]);
         setSelectedIndex(0);
+        setHasUnsavedChanges(false);
+        setSaveStatus("idle");
+        setSaveError(null);
+        dirtyCounterRef.current = 0;
       } catch (error) {
         if (!active) return;
         setItemsError(
@@ -450,6 +548,7 @@ const EditPage = () => {
 
     const incoming = buildEditableItems(fetchedPlaylistItems);
     let duplicateCount = 0;
+    let addedCount = 0;
 
     setPlaylistItems((prev) => {
       const existingKeys = new Set(
@@ -464,15 +563,18 @@ const EditPage = () => {
         }
         if (key) existingKeys.add(key);
         next.push(item);
+        addedCount += 1;
       });
       return next;
     });
+    if (addedCount > 0) {
+      markDirty();
+    }
 
     if (duplicateCount > 0) {
       setPlaylistAddError(DUPLICATE_SONG_ERROR);
     }
 
-    setIsAddPanelOpen(false);
     setPendingPlaylistImport(false);
     handleResetPlaylist();
   }, [
@@ -529,7 +631,7 @@ const EditPage = () => {
     const player = new window.YT.Player(playerContainerRef.current, {
       videoId: selectedVideoId,
       playerVars: {
-        autoplay: 1,
+        autoplay: 0,
         controls: 0,
         rel: 0,
         playsinline: 1,
@@ -541,20 +643,42 @@ const EditPage = () => {
         onReady: (event: any) => {
           setIsPlayerReady(true);
           event.target.setVolume?.(volume);
-          event.target.playVideo?.();
-          setIsPlaying(true);
+          if (playRequestedRef.current) {
+            event.target.playVideo?.();
+            setIsPlaying(true);
+          } else {
+            event.target.pauseVideo?.();
+            setIsPlaying(false);
+          }
+          let attempts = 0;
+          const trySync = () => {
+            const duration = event.target.getDuration?.();
+            if (duration && duration > 0) {
+              syncDurationFromPlayer(duration);
+              return;
+            }
+            attempts += 1;
+            if (attempts < 5) {
+              window.setTimeout(trySync, 300);
+            }
+          };
+          trySync();
         },
         onStateChange: (event: any) => {
           const state = window.YT?.PlayerState;
           if (!state) return;
           if (event.data === state.PLAYING) {
+            if (!playRequestedRef.current) {
+              event.target.pauseVideo?.();
+              setIsPlaying(false);
+              return;
+            }
             setIsPlaying(true);
-          } else if (event.data === state.PAUSED) {
+          } else if (
+            event.data === state.PAUSED ||
+            event.data === state.ENDED
+          ) {
             setIsPlaying(false);
-          } else if (event.data === state.ENDED) {
-            event.target.seekTo?.(startSec, true);
-            event.target.playVideo?.();
-            setIsPlaying(true);
           }
         },
       },
@@ -613,7 +737,12 @@ const EditPage = () => {
     setEndTimeInput(formatSeconds(nextEnd));
     setAnswerText(selectedItem.answerText);
     setCurrentTimeSec(nextStart);
-  }, [selectedItem?.localId]);
+  }, [
+    selectedItem?.localId,
+    selectedItem?.startSec,
+    selectedItem?.endSec,
+    selectedItem?.answerText,
+  ]);
 
   const updateSelectedItem = (updates: Partial<EditableItem>) => {
     setPlaylistItems((prev) =>
@@ -621,6 +750,15 @@ const EditPage = () => {
         idx === selectedIndex ? { ...item, ...updates } : item,
       ),
     );
+    markDirty();
+  };
+
+  const handleSelectIndex = (nextIndex: number) => {
+    if (nextIndex === selectedIndex) return;
+    if (hasUnsavedChanges) {
+      void handleSaveCollection("auto");
+    }
+    setSelectedIndex(nextIndex);
   };
 
   const handleImportPlaylist = () => {
@@ -670,6 +808,7 @@ const EditPage = () => {
   };
 
   const moveItem = (fromIndex: number, toIndex: number) => {
+    let didMove = false;
     setPlaylistItems((prev) => {
       if (
         fromIndex < 0 ||
@@ -682,6 +821,7 @@ const EditPage = () => {
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
+      didMove = true;
       return next;
     });
 
@@ -695,9 +835,13 @@ const EditPage = () => {
       }
       return prev;
     });
+    if (didMove) {
+      markDirty();
+    }
   };
 
   const removeItem = (index: number) => {
+    markDirty();
     setPlaylistItems((prev) => {
       const target = prev[index];
       if (target?.dbId) {
@@ -722,7 +866,9 @@ const EditPage = () => {
     if (playingState !== undefined && state === playingState) {
       player.pauseVideo?.();
       setIsPlaying(false);
+      playRequestedRef.current = false;
     } else {
+      playRequestedRef.current = true;
       player.playVideo?.();
       setIsPlaying(true);
     }
@@ -731,6 +877,35 @@ const EditPage = () => {
   const handleVolumeChange = (value: number) => {
     const clamped = Math.min(100, Math.max(0, value));
     setVolume(clamped);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(EDIT_VOLUME_STORAGE_KEY, String(clamped));
+    }
+  };
+
+  const syncDurationFromPlayer = (durationSec: number) => {
+    if (!Number.isFinite(durationSec) || durationSec <= 0) return;
+    const cap = Math.max(1, Math.floor(durationSec));
+    let didUpdate = false;
+    setPlaylistItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== selectedIndex) return item;
+        let nextEnd = item.endSec;
+        if (!Number.isFinite(nextEnd) || nextEnd > cap) {
+          nextEnd = cap;
+        }
+        if (nextEnd <= item.startSec) {
+          nextEnd = Math.min(cap, item.startSec + 1);
+        }
+        const nextDuration = formatSeconds(cap);
+        if (item.duration !== nextDuration || item.endSec !== nextEnd) {
+          didUpdate = true;
+        }
+        return { ...item, duration: nextDuration, endSec: nextEnd };
+      }),
+    );
+    if (didUpdate) {
+      markDirty();
+    }
   };
 
   const handleProgressChange = (value: number) => {
@@ -766,6 +941,10 @@ const EditPage = () => {
       start_sec: item.startSec,
       end_sec: item.endSec,
       answer_text: item.answerText || item.title || "Untitled",
+      duration_sec: (() => {
+        const parsed = parseDurationToSeconds(item.duration ?? "");
+        return parsed && parsed > 0 ? parsed : undefined;
+      })(),
     }));
 
     const toUpdate = updatePayloads.filter((item) => item.id);
@@ -783,6 +962,9 @@ const EditPage = () => {
               start_sec: item.start_sec,
               end_sec: item.end_sec,
               answer_text: item.answer_text,
+              ...(item.duration_sec !== undefined
+                ? { duration_sec: item.duration_sec }
+                : {}),
             }),
           }),
         ),
@@ -797,6 +979,9 @@ const EditPage = () => {
         start_sec: item.start_sec,
         end_sec: item.end_sec,
         answer_text: item.answer_text,
+        ...(item.duration_sec !== undefined
+          ? { duration_sec: item.duration_sec }
+          : {}),
       }));
       const res = await fetch(
         `${WORKER_API_URL}/collections/${collectionId}/items`,
@@ -834,18 +1019,29 @@ const EditPage = () => {
     }
   };
 
-  const handleSaveCollection = async () => {
+  const handleSaveCollection = async (mode: "manual" | "auto" = "manual") => {
+    if (saveInFlightRef.current) return;
     if (!WORKER_API_URL || !authToken || !ownerId) {
-      setSaveStatus("error");
-      setSaveError("請先登入後再儲存");
+      if (mode === "auto") {
+        showAutoSaveNotice("error", AUTO_SAVE_ERROR_LABEL);
+      } else {
+        setSaveStatus("error");
+        setSaveError("請先登入後再儲存");
+      }
       return;
     }
     if (!collectionTitle.trim()) {
-      setSaveStatus("error");
-      setSaveError("title is required");
+      if (mode === "auto") {
+        showAutoSaveNotice("error", "請先輸入收藏庫名稱");
+      } else {
+        setSaveStatus("error");
+        setSaveError("title is required");
+      }
       return;
     }
 
+    const dirtySnapshot = dirtyCounterRef.current;
+    saveInFlightRef.current = true;
     setSaveStatus("saving");
     setSaveError(null);
 
@@ -894,12 +1090,28 @@ const EditPage = () => {
       if (createdCollection) {
         setActiveCollectionId(createdCollection.id);
         setCollections((prev) => [createdCollection, ...prev]);
+        navigate(`/collection/edit/${createdCollection.id}`, { replace: true });
       }
 
-      setSaveStatus("saved");
+      const noNewChanges = dirtyCounterRef.current === dirtySnapshot;
+      if (noNewChanges) {
+        setSaveStatus("saved");
+        setHasUnsavedChanges(false);
+        dirtyCounterRef.current = 0;
+        if (mode === "auto") {
+          showAutoSaveNotice("success", AUTO_SAVE_SUCCESS_LABEL);
+        }
+      } else {
+        setSaveStatus("idle");
+      }
     } catch (error) {
       setSaveStatus("error");
       setSaveError(error instanceof Error ? error.message : "Failed to save");
+      if (mode === "auto") {
+        showAutoSaveNotice("error", AUTO_SAVE_ERROR_LABEL);
+      }
+    } finally {
+      saveInFlightRef.current = false;
     }
   };
 
@@ -915,7 +1127,7 @@ const EditPage = () => {
             variant="outlined"
             size="small"
             onClick={() => {
-              // setViewMode("list");
+              if (!confirmLeave()) return;
               navigate("/rooms", { replace: true });
             }}
           >
@@ -931,11 +1143,6 @@ const EditPage = () => {
           </Button>
         </div>
       </div>
-      {!authToken && (
-        <div className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-200">
-          請先使用 Google 登入後再編輯收藏庫。
-        </div>
-      )}
       <div className={isReadOnly ? "pointer-events-none opacity-60" : ""}>
         {collectionsLoading && (
           <div className="text-xs text-slate-400">{LOADING_LABEL}</div>
@@ -965,40 +1172,43 @@ const EditPage = () => {
         <Box display={"flex"} gap={5}>
           <Box flexGrow={1}>
             {collectionCount > 0 && (
-              <>
-                <label className="text-xs text-slate-300">
-                  {COLLECTION_SELECT_LABEL}
-                </label>
-                <select
-                  value={activeCollectionId ?? ""}
-                  onChange={(e) => {
-                    const nextId = e.target.value;
-                    setActiveCollectionId(nextId || null);
-                    const selected = collections.find(
-                      (item) => item.id === nextId,
-                    );
-                    setCollectionTitle(selected?.title ?? "");
-                    setPlaylistItems([]);
-                    setPlaylistAddError(null);
-                    setPendingDeleteIds([]);
-                    setSelectedIndex(0);
-                  }}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                >
-                  {collections.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title || item.id}
-                    </option>
-                  ))}
-                </select>
-              </>
+              <CollectionSelect
+                label={COLLECTION_SELECT_LABEL}
+                newLabel={NEW_COLLECTION_LABEL}
+                value={activeCollectionId ?? ""}
+                collections={collections}
+                onChange={(nextId) => {
+                  if (!confirmLeave()) return;
+                  if (nextId) {
+                    navigate(`/collection/edit/${nextId}`);
+                  } else {
+                    navigate("/collection/edit");
+                  }
+                  setActiveCollectionId(nextId || null);
+                  const selected = collections.find(
+                    (item) => item.id === nextId,
+                  );
+                  setCollectionTitle(nextId ? (selected?.title ?? "") : "");
+                  setPlaylistItems([]);
+                  setPlaylistAddError(null);
+                  setPendingDeleteIds([]);
+                  setSelectedIndex(0);
+                  setHasUnsavedChanges(false);
+                  setSaveStatus("idle");
+                  setSaveError(null);
+                  dirtyCounterRef.current = 0;
+                }}
+              />
             )}
             <label className="text-xs text-slate-300">
               {TEXT.collectionName}
             </label>
             <input
               value={collectionTitle}
-              onChange={(e) => setCollectionTitle(e.target.value)}
+              onChange={(e) => {
+                setCollectionTitle(e.target.value);
+                markDirty();
+              }}
               placeholder={TEXT.collectionNamePlaceholder}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
             />
@@ -1044,41 +1254,6 @@ const EditPage = () => {
                 </div>
               </div>
             </div>
-          </Box>
-          <Box maxWidth={"80%"}>
-            {isAddPanelOpen && (
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 space-y-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddPanelOpen(false)}
-                    className="rounded px-2 py-1 bg-slate-800 text-slate-300 hover:text-slate-100"
-                  >
-                    \u95dc\u9589
-                  </button>
-                </div>
-                <div className="flex flex-col gap-2 md:flex-row">
-                  <input
-                    value={playlistUrl}
-                    onChange={(e) => {
-                      setPlaylistUrl(e.target.value);
-                      if (playlistAddError) setPlaylistAddError(null);
-                    }}
-                    placeholder={TEXT.playlistPlaceholder}
-                    className="w-full flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleImportPlaylist}
-                    disabled={playlistLoading}
-                    className="px-4 py-2 text-sm rounded-lg bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-60"
-                  >
-                    {playlistLoading ? TEXT.loading : ADD_PLAYLIST_LABEL}
-                  </button>
-                </div>
-              </div>
-            )}
-
             {playlistItems.length > 0 && (
               <div className="space-y-3">
                 <div className="text-sm text-slate-300">
@@ -1095,11 +1270,11 @@ const EditPage = () => {
                     return (
                       <div
                         key={item.localId}
-                        onClick={() => setSelectedIndex(idx)}
+                        onClick={() => handleSelectIndex(idx)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            setSelectedIndex(idx);
+                            handleSelectIndex(idx);
                           }
                         }}
                         role="button"
@@ -1165,7 +1340,7 @@ const EditPage = () => {
                             disabled={idx === 0}
                             className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
                           >
-                            {"\u4e0a\u79fb"}
+                            上移
                           </button>
                           <button
                             type="button"
@@ -1176,7 +1351,7 @@ const EditPage = () => {
                             disabled={idx === playlistItems.length - 1}
                             className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
                           >
-                            {"\u4e0b\u79fb"}
+                            下移
                           </button>
                         </div>
                       </div>
@@ -1184,9 +1359,8 @@ const EditPage = () => {
                   })}
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsAddPanelOpen(true);
-                    }}
+                    onClick={handleImportPlaylist}
+                    disabled={playlistLoading}
                     className="flex-shrink-0 w-28 rounded-lg border-2 border-dashed border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100 transition-colors"
                   >
                     <div className="flex h-full w-full flex-col items-center justify-center gap-1 py-6">
@@ -1346,7 +1520,7 @@ const EditPage = () => {
                             className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 hover:border-slate-400"
                             aria-label="Nudge start forward"
                           >
-                            {"\u25B2"}
+                            ▲
                           </button>
                           <button
                             type="button"
@@ -1354,7 +1528,7 @@ const EditPage = () => {
                             className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 hover:border-slate-400"
                             aria-label="Nudge start backward"
                           >
-                            {"\u25BC"}
+                            ▼
                           </button>
                         </div>
                       </div>
@@ -1391,7 +1565,7 @@ const EditPage = () => {
                             className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 hover:border-slate-400"
                             aria-label="Nudge end forward"
                           >
-                            {"\u25B2"}
+                            ▲
                           </button>
                           <button
                             type="button"
@@ -1399,7 +1573,7 @@ const EditPage = () => {
                             className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 hover:border-slate-400"
                             aria-label="Nudge end backward"
                           >
-                            {"\u25BC"}
+                            ▼
                           </button>
                         </div>
                       </div>
@@ -1427,6 +1601,17 @@ const EditPage = () => {
           </Box>
         </Box>
       </div>
+      {autoSaveNotice && (
+        <div
+          className={`fixed bottom-4 left-4 z-50 rounded-md px-3 py-2 text-xs text-white shadow ${
+            autoSaveNotice.type === "success"
+              ? "bg-emerald-500/90"
+              : "bg-rose-500/90"
+          }`}
+        >
+          {autoSaveNotice.message}
+        </div>
+      )}
     </div>
     // </div>
   );
