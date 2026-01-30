@@ -45,6 +45,16 @@ interface RoomCreationSectionProps {
   youtubePlaylists?: { id: string; title: string; itemCount: number }[];
   youtubePlaylistsLoading?: boolean;
   youtubePlaylistsError?: string | null;
+  collections?: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+  }>;
+  collectionsLoading?: boolean;
+  collectionsError?: string | null;
+  selectedCollectionId?: string | null;
+  collectionItemsLoading?: boolean;
+  collectionItemsError?: string | null;
   isGoogleAuthed?: boolean;
   onGoogleLogin?: () => void;
   onRoomNameChange: (value: string) => void;
@@ -55,6 +65,9 @@ interface RoomCreationSectionProps {
   onResetPlaylist: () => void;
   onFetchYoutubePlaylists?: () => void;
   onImportYoutubePlaylist?: (playlistId: string) => void;
+  onFetchCollections?: () => void;
+  onSelectCollection?: (collectionId: string | null) => void;
+  onLoadCollectionItems?: (collectionId: string) => void;
   onCreateRoom: () => void;
   onJoinRoom: (roomId: string, hasPassword: boolean) => void;
 }
@@ -79,6 +92,12 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   youtubePlaylists = [],
   youtubePlaylistsLoading = false,
   youtubePlaylistsError = null,
+  collections = [],
+  collectionsLoading = false,
+  collectionsError = null,
+  selectedCollectionId = null,
+  collectionItemsLoading = false,
+  collectionItemsError = null,
   isGoogleAuthed = false,
   onGoogleLogin,
   onRoomNameChange,
@@ -88,19 +107,22 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   onResetPlaylist,
   onFetchYoutubePlaylists,
   onImportYoutubePlaylist,
+  onFetchCollections,
+  onSelectCollection,
+  onLoadCollectionItems,
   onCreateRoom,
 }) => {
   const [settingsExpanded, setSettingsExpanded] = React.useState(false);
   const [selectedYoutubeId, setSelectedYoutubeId] = React.useState("");
-  const [playlistSource, setPlaylistSource] = React.useState<"link" | "mine">(
-    "link",
-  );
+  const [playlistSource, setPlaylistSource] = React.useState<
+    "link" | "mine" | "collection"
+  >("link");
   const needsReauth = Boolean(
     youtubePlaylistsError && youtubePlaylistsError.includes("重新授權"),
   );
   const channelMissing = Boolean(
     youtubePlaylistsError &&
-      youtubePlaylistsError.includes("尚未建立 YouTube 頻道"),
+    youtubePlaylistsError.includes("尚未建立 YouTube 頻道"),
   );
   const isAsciiAlphaNum = (value: string) => /^[a-zA-Z0-9]*$/.test(value);
   const canCreateRoom = Boolean(
@@ -108,6 +130,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   );
   const showPlaylistInput = playlistStage === "input";
   const privacyLabel = roomPassword.trim() ? "需密碼" : "公開";
+  const playlistSourceLoading = playlistLoading || collectionItemsLoading;
 
   const rowCount = playlistItems.length;
   const canAdjustQuestions =
@@ -430,13 +453,14 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
           </div>
           {showPlaylistInput ? (
             <Stack spacing={2}>
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="center">
                 <Button
                   variant={playlistSource === "link" ? "contained" : "outlined"}
                   className="room-create-accent-button"
                   onClick={() => {
                     setPlaylistSource("link");
                     setSelectedYoutubeId("");
+                    onSelectCollection?.(null);
                   }}
                 >
                   {"貼上連結"}
@@ -444,10 +468,25 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                 <Button
                   variant={playlistSource === "mine" ? "contained" : "outlined"}
                   className="room-create-accent-button"
-                  onClick={() => setPlaylistSource("mine")}
+                  onClick={() => {
+                    setPlaylistSource("mine");
+                    onSelectCollection?.(null);
+                  }}
                   disabled={!isGoogleAuthed}
                 >
                   {"我的播放清單"}
+                </Button>
+                <Button
+                  variant={
+                    playlistSource === "collection" ? "contained" : "outlined"
+                  }
+                  onClick={() => {
+                    setPlaylistSource("collection");
+                    setSelectedYoutubeId("");
+                  }}
+                  disabled={!isGoogleAuthed}
+                >
+                  {"收藏庫"}
                 </Button>
                 {!isGoogleAuthed && (
                   <Typography variant="caption" className="room-create-muted">
@@ -594,6 +633,75 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   )}
                 </Stack>
               )}
+              {playlistSource === "collection" && (
+                <Stack spacing={1.5}>
+                  {!isGoogleAuthed && (
+                    <Button
+                      variant="outlined"
+                      onClick={onGoogleLogin}
+                      disabled={!onGoogleLogin}
+                    >
+                      {"使用 Google 登入"}
+                    </Button>
+                  )}
+                  {isGoogleAuthed && (
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                      <Button
+                        variant="outlined"
+                        onClick={onFetchCollections}
+                        disabled={!onFetchCollections || collectionsLoading}
+                      >
+                        {collectionsLoading ? "載入中..." : "取得收藏庫"}
+                      </Button>
+                      {collections.length > 0 && (
+                        <>
+                          <select
+                            value={selectedCollectionId ?? ""}
+                            onChange={(e) =>
+                              onSelectCollection?.(
+                                e.target.value ? e.target.value : null,
+                              )
+                            }
+                            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                          >
+                            <option value="">{"請選擇收藏庫"}</option>
+                            {collections.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.title}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            variant="contained"
+                            color="secondary"
+                            disabled={
+                              !selectedCollectionId || collectionItemsLoading
+                            }
+                            onClick={() =>
+                              selectedCollectionId &&
+                              onLoadCollectionItems?.(selectedCollectionId)
+                            }
+                          >
+                            {collectionItemsLoading
+                              ? "載入中..."
+                              : "載入收藏庫"}
+                          </Button>
+                        </>
+                      )}
+                    </Stack>
+                  )}
+                  {collectionsError && (
+                    <Alert severity="error" variant="outlined">
+                      {collectionsError}
+                    </Alert>
+                  )}
+                  {collectionItemsError && (
+                    <Alert severity="error" variant="outlined">
+                      {collectionItemsError}
+                    </Alert>
+                  )}
+                </Stack>
+              )}
             </Stack>
           ) : (
             <Stack
@@ -607,16 +715,21 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   播放清單已鎖定
                 </Typography>
                 <Typography variant="body2" className="room-create-muted">
-                  如需重選，請按「重選播放清單」並重新貼上網址。
+                  如需重選，請按「重選來源」並重新貼上網址。
                 </Typography>
               </Stack>
               <Stack direction="row" spacing={1} alignItems="center">
                 <Button
                   variant="outlined"
                   className="room-create-accent-button"
-                  onClick={onResetPlaylist}
+                  onClick={() => {
+                    onResetPlaylist();
+                    setPlaylistSource("link");
+                    setSelectedYoutubeId("");
+                    onSelectCollection?.(null);
+                  }}
                 >
-                  重選播放清單
+                  重選來源
                 </Button>
                 <Chip
                   label="Locked"
@@ -627,7 +740,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               </Stack>
             </Stack>
           )}
-          {playlistLoading && <LinearProgress color="primary" />}
+          {playlistSourceLoading && <LinearProgress color="primary" />}
           {playlistError && (
             <Alert severity="error" variant="outlined">
               {playlistError}

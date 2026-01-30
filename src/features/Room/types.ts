@@ -8,6 +8,9 @@ export interface PlaylistItem {
   uploader?: string;
   duration?: string;
   thumbnail?: string;
+  startSec?: number;
+  endSec?: number;
+  answerText?: string;
 }
 
 export interface PlaylistState {
