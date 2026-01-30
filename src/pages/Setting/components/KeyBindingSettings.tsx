@@ -1,39 +1,16 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
-
-export type KeyBindings = Record<number, string>;
-
-const STORAGE_KEY = "mq_keybindings";
-const DEFAULT_BINDINGS: KeyBindings = { 0: "Q", 1: "W", 2: "A", 3: "S" };
-
-export const useKeyBindings = () => {
-  const [keyBindings, setKeyBindings] = useState<KeyBindings>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as KeyBindings;
-    } catch {
-      /* ignore parse errors */
-    }
-    return DEFAULT_BINDINGS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(keyBindings));
-    } catch {
-      /* ignore */
-    }
-  }, [keyBindings]);
-
-  return { keyBindings, setKeyBindings } as const;
-};
+import React, { useMemo } from "react";
+import type { KeyBindings } from "./useKeyBindings";
 
 interface KeyBindingSettingsProps {
   keyBindings: KeyBindings;
   onChange: (next: KeyBindings) => void;
 }
 
-const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({ keyBindings, onChange }) => {
-  const labels = useMemo(() => ["左上", "右上", "左下", "右下"], []);
+const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
+  keyBindings,
+  onChange,
+}) => {
+  const labels = useMemo(() => ["??", "??", "??", "??"], []);
 
   return (
     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-200 sm:grid-cols-4">
@@ -44,7 +21,7 @@ const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({ keyBindings, on
         >
           <span className="text-[11px] text-slate-400">{label}</span>
           <input
-            aria-label={`${label} 鍵位`}
+            aria-label={`${label} ??`}
             value={(keyBindings[idx] ?? "").toUpperCase()}
             maxLength={1}
             onChange={(e) => {

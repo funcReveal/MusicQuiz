@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, {
   useCallback,
   useEffect,
@@ -12,9 +13,7 @@ import type {
   PlaylistItem,
   RoomState,
 } from "../../features/Room/types";
-import KeyBindingSettings, {
-  useKeyBindings,
-} from "../Setting/components/KeyBindingSettings";
+import { useKeyBindings } from "../Setting/components/useKeyBindings";
 
 interface GameRoomPageProps {
   room: RoomState["room"];
@@ -57,7 +56,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   messageInput = "",
   onMessageChange,
   onSendMessage,
-  username,
   serverOffsetMs = 0,
 }) => {
   const [volume, setVolume] = useState(() => {
@@ -73,15 +71,14 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   );
   const [showVideo, setShowVideo] = useState(gameState.showVideo ?? true);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
-  const [preheatVideoId, setPreheatVideoId] = useState<string | null>(null);
   const [isTrackLoading, setIsTrackLoading] = useState(true);
-  const { keyBindings, setKeyBindings } = useKeyBindings();
+  const { keyBindings } = useKeyBindings();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hasStartedPlaybackRef = useRef(false);
   const playerReadyRef = useRef(false);
-  const lastSyncMsRef = useRef<number>(Date.now() + serverOffsetMs);
-  const initialVideoIdRef = useRef<string | null>(null);
-  const initialIframeSrcRef = useRef<string | null>(null);
+  const lastSyncMsRef = useRef<number>(0);
+  const [initialVideoId, setInitialVideoId] = useState<string | null>(null);
+  const [initialIframeSrc, setInitialIframeSrc] = useState<string | null>(null);
   const lastTrackLoadKeyRef = useRef<string | null>(null);
   const lastLoadedVideoIdRef = useRef<string | null>(null);
   const lastTrackSessionRef = useRef<string | null>(null);
@@ -92,6 +89,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     () => Date.now() + serverOffsetMs,
     [serverOffsetMs],
   );
+  useEffect(() => {
+    lastSyncMsRef.current = Date.now() + serverOffsetMs;
+  }, [serverOffsetMs]);
   const computeServerPositionSec = useCallback(
     () =>
       Math.max(0, Math.floor((getServerNowMs() - gameState.startedAt) / 1000)),
@@ -147,10 +147,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   }, [playlist, currentTrackIndex]);
 
   const videoId = item ? extractYouTubeId(item.url) : null;
-  if (!initialVideoIdRef.current && videoId) {
-    initialVideoIdRef.current = videoId;
-    initialIframeSrcRef.current = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`;
-  }
+  useEffect(() => {
+    if (initialVideoId || !videoId) return;
+    setInitialVideoId(videoId);
+    setInitialIframeSrc(
+      `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`,
+    );
+  }, [initialVideoId, videoId]);
   const phaseEndsAt =
     gameState.phase === "guess"
       ? gameState.startedAt + gameState.guessDurationMs
@@ -160,14 +163,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const isEnded = gameState.status === "ended";
   const isReveal = gameState.phase === "reveal";
   const correctChoiceIndex = currentTrackIndex;
-  const nextTrackIndex =
-    effectiveTrackOrder[
-      Math.min(boundedCursor + 1, Math.max(trackOrderLength - 1, 0))
-    ];
-  const nextVideoId =
-    nextTrackIndex !== undefined && nextTrackIndex !== null
-      ? extractYouTubeId(playlist[nextTrackIndex]?.url ?? "")
-      : null;
   // 只用曲目索引決定是否重載，避免伺服器在公布階段更新 startedAt 時觸發重載
   const trackLoadKey = `${videoId ?? "none"}`;
   const trackSessionKey = `${currentTrackIndex}`;
@@ -236,10 +231,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     ],
   );
 
-  const resyncPlaybackToServerTime = useCallback(() => {
-    // 停用背景重同步，避免公布瞬間的任何 seek 造成音樂不連續
-    return;
-  }, []);
 
   // 公布答案切換時，若音樂已在播，保持當前進度並標記載入完畢，避免重新 seek。
   useEffect(() => {
@@ -345,7 +336,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
       if (data.event === "onReady") {
         playerReadyRef.current = true;
-        const currentId = videoId ?? initialVideoIdRef.current;
+        const currentId = videoId ?? initialVideoId;
         const currentKey = `${currentId ?? "none"}`;
         if (!currentId) return;
         if (lastTrackLoadKeyRef.current) return; // already loaded first track
@@ -386,6 +377,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     gameState.startedAt,
     loadTrack,
     startPlayback,
+    initialVideoId,
     videoId,
     waitingToStart,
   ]);
@@ -456,7 +448,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
       const pressed = e.key.toUpperCase();
       const match = Object.entries(keyBindings).find(
-        ([_, key]) => key.toUpperCase() === pressed,
+        ([, key]) => key.toUpperCase() === pressed,
       );
       if (!match) return;
 
@@ -472,7 +464,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   }, [gameState.choices, isEnded, isReveal, keyBindings, onSubmitChoice]);
 
   const iframeSrc =
-    initialIframeSrcRef.current ||
+    initialIframeSrc ||
     (videoId
       ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
       : null);
@@ -509,15 +501,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const recentMessages = messages.slice(-80);
 
   // （預熱暫停使用，以排除干擾播放的可能）
-  useEffect(() => {
-    setPreheatVideoId(null);
-  }, [
-    gameState.startedAt,
-    boundedCursor,
-    isReveal,
-    phaseRemainingMs,
-    nextVideoId,
-  ]);
 
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -697,7 +680,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 src={iframeSrc}
                 className="h-full w-full object-contain"
                 allow="autoplay; encrypted-media"
-                controlsList="nodownload noremoteplayback"
                 allowFullScreen
                 title="Now playing"
                 style={{

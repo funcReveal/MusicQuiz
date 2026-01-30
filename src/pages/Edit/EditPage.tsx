@@ -8,9 +8,54 @@ import CollectionSelect from "./components/CollectionSelect";
 
 const WORKER_API_URL = import.meta.env.VITE_WORKER_API_URL;
 
+type YTPlayerStateMap = {
+  PLAYING: number;
+  PAUSED: number;
+  ENDED: number;
+};
+
+type YTPlayerEvent = {
+  target: YTPlayer;
+};
+
+type YTPlayerStateEvent = {
+  data: number;
+  target: YTPlayer;
+};
+
+type YTPlayerOptions = {
+  videoId: string;
+  playerVars?: Record<string, unknown>;
+  events?: {
+    onReady?: (event: YTPlayerEvent) => void;
+    onStateChange?: (event: YTPlayerStateEvent) => void;
+  };
+};
+
+type YTPlayerConstructor = new (
+  element: HTMLElement,
+  options: YTPlayerOptions,
+) => YTPlayer;
+
+type YTNamespace = {
+  Player: YTPlayerConstructor;
+  PlayerState?: YTPlayerStateMap;
+};
+
+type YTPlayer = {
+  destroy: () => void;
+  playVideo?: () => void;
+  pauseVideo?: () => void;
+  seekTo?: (seconds: number, allowSeekAhead?: boolean) => void;
+  setVolume?: (volume: number) => void;
+  getDuration?: () => number;
+  getCurrentTime?: () => number;
+  getPlayerState?: () => number;
+};
+
 declare global {
   interface Window {
-    YT?: any;
+    YT?: YTNamespace;
     onYouTubeIframeAPIReady?: () => void;
   }
 }
@@ -229,7 +274,6 @@ const EditPage = () => {
     authToken,
     authUser,
     displayUsername,
-    clientId,
     username,
     playlistUrl,
     playlistItems: fetchedPlaylistItems,
@@ -277,7 +321,7 @@ const EditPage = () => {
   );
   const [answerText, setAnswerText] = useState("");
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<YTPlayer | null>(null);
   const playRequestedRef = useRef(false);
   const hasResetPlaylistRef = useRef(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
@@ -295,32 +339,20 @@ const EditPage = () => {
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const ownerId = authUser?.id ?? null;
   const isReadOnly = !authToken;
-  const workerAuthHeaders = useMemo(
-    () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    [authToken],
+  const workerAuthHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    return headers;
+  }, [authToken]);
+  const workerJsonHeaders = useMemo<Record<string, string>>(
+    () => ({
+      "Content-Type": "application/json",
+      ...workerAuthHeaders,
+    }),
+    [workerAuthHeaders],
   );
-
-  if (!authToken) {
-    return (
-      <div className="flex flex-col w-95/100 space-y-4">
-        <div className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-4 text-sm text-amber-200">
-          請先使用 Google 登入後再編輯收藏庫。
-        </div>
-        <div className="text-sm text-slate-300">
-          目前為訪客模式，無法使用收藏庫功能。
-        </div>
-        <div>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => navigate("/rooms", { replace: true })}
-          >
-            {TEXT.backRooms}
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     if (collectionId) {
@@ -430,7 +462,7 @@ const EditPage = () => {
       try {
         await fetch(`${WORKER_API_URL}/users`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
+          headers: workerJsonHeaders,
           body: JSON.stringify({
             id: ownerId,
             display_name:
@@ -450,7 +482,7 @@ const EditPage = () => {
           `${WORKER_API_URL}/collections?owner_id=${encodeURIComponent(
             ownerId,
           )}&pageSize=50`,
-          { headers: { ...workerAuthHeaders } },
+          { headers: workerAuthHeaders },
         );
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
@@ -504,7 +536,7 @@ const EditPage = () => {
       try {
         const res = await fetch(
           `${WORKER_API_URL}/collections/${activeCollectionId}/items?pageSize=200`,
-          { headers: { ...workerAuthHeaders } },
+          { headers: workerAuthHeaders },
         );
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
@@ -628,7 +660,9 @@ const EditPage = () => {
     setIsPlayerReady(false);
     setIsPlaying(false);
 
-    const player = new window.YT.Player(playerContainerRef.current, {
+    const yt = window.YT;
+    if (!yt?.Player) return;
+    const player = new yt.Player(playerContainerRef.current, {
       videoId: selectedVideoId,
       playerVars: {
         autoplay: 0,
@@ -640,7 +674,7 @@ const EditPage = () => {
         modestbranding: 1,
       },
       events: {
-        onReady: (event: any) => {
+        onReady: (event: YTPlayerEvent) => {
           setIsPlayerReady(true);
           event.target.setVolume?.(volume);
           if (playRequestedRef.current) {
@@ -664,7 +698,7 @@ const EditPage = () => {
           };
           trySync();
         },
-        onStateChange: (event: any) => {
+        onStateChange: (event: YTPlayerStateEvent) => {
           const state = window.YT?.PlayerState;
           if (!state) return;
           if (event.data === state.PLAYING) {
@@ -929,10 +963,6 @@ const EditPage = () => {
 
   const syncItemsToDb = async (collectionId: string) => {
     if (!WORKER_API_URL || !authToken) return;
-    const jsonHeaders = {
-      "Content-Type": "application/json",
-      ...workerAuthHeaders,
-    };
     const updatePayloads = playlistItems.map((item, idx) => ({
       localId: item.localId,
       id: item.dbId,
@@ -955,7 +985,7 @@ const EditPage = () => {
         toUpdate.map((item) =>
           fetch(`${WORKER_API_URL}/collection-items/${item.id}`, {
             method: "PATCH",
-            headers: jsonHeaders,
+            headers: workerJsonHeaders,
             body: JSON.stringify({
               sort: item.sort,
               video_id: item.video_id ?? null,
@@ -987,7 +1017,7 @@ const EditPage = () => {
         `${WORKER_API_URL}/collections/${collectionId}/items`,
         {
           method: "POST",
-          headers: jsonHeaders,
+          headers: workerJsonHeaders,
           body: JSON.stringify({ items: insertItems }),
         },
       );
@@ -1011,7 +1041,7 @@ const EditPage = () => {
         pendingDeleteIds.map((id) =>
           fetch(`${WORKER_API_URL}/collection-items/${id}`, {
             method: "DELETE",
-            headers: { ...workerAuthHeaders },
+            headers: workerAuthHeaders,
           }),
         ),
       );
@@ -1051,7 +1081,7 @@ const EditPage = () => {
       if (!collectionId) {
         const res = await fetch(`${WORKER_API_URL}/collections`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
+          headers: workerJsonHeaders,
           body: JSON.stringify({
             owner_id: ownerId,
             title: collectionTitle.trim(),
@@ -1072,7 +1102,7 @@ const EditPage = () => {
       } else {
         await fetch(`${WORKER_API_URL}/collections/${collectionId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", ...workerAuthHeaders },
+          headers: workerJsonHeaders,
           body: JSON.stringify({ title: collectionTitle.trim() }),
         });
         setCollections((prev) =>
@@ -1115,6 +1145,28 @@ const EditPage = () => {
     }
   };
 
+  if (!authToken) {
+    return (
+      <div className="flex flex-col w-95/100 space-y-4">
+        <div className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-4 text-sm text-amber-200">
+          請先使用 Google 登入後再編輯收藏庫。
+        </div>
+        <div className="text-sm text-slate-300">
+          目前為訪客模式，無法使用收藏庫功能。
+        </div>
+        <div>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate("/rooms", { replace: true })}
+          >
+            {TEXT.backRooms}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col w-95/100 space-y-4">
       {/* <div className="w-full md:w-full lg:w-3/5 mx-auto space-y-4"> */}
@@ -1136,7 +1188,7 @@ const EditPage = () => {
           <Button
             variant="contained"
             size="small"
-            onClick={handleSaveCollection}
+            onClick={() => handleSaveCollection("manual")}
             disabled={saveStatus === "saving" || isReadOnly}
           >
             {saveStatus === "saving" ? SAVING_LABEL : SAVE_LABEL}
