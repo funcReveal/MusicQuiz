@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://mq-backend.onrender.com/api/$1" },
+    { "source": "/health", "destination": "https://mq-backend.onrender.com/health" },
+    { "source": "/socket.io/(.*)", "destination": "https://mq-backend.onrender.com/socket.io/$1" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

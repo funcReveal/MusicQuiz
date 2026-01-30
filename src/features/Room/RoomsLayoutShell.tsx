@@ -38,10 +38,13 @@ const RoomsLayoutShell: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-slate-900 text-slate-100 justify-center items-start p-4">
       <div className="flex flex-col w-95/100 space-y-4">
-        <HeaderSection
-          serverUrl={import.meta.env.VITE_SOCKET_URL}
-          isConnected={isConnected}
-          displayUsername={displayUsername}
+          <HeaderSection
+            serverUrl={
+              import.meta.env.VITE_SOCKET_URL ||
+              (typeof window !== "undefined" ? window.location.origin : "")
+            }
+            isConnected={isConnected}
+            displayUsername={displayUsername}
           authUser={authUser}
           authLoading={authLoading}
           onLogin={loginWithGoogle}

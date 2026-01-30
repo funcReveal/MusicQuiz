@@ -32,12 +32,15 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
   const authLabel = authUser?.display_name || authUser?.id || displayUsername;
   const authSubLabel = authUser?.email ?? null;
 
-  async function checkPing() {
-    const start = performance.now();
-    await fetch(`${import.meta.env.VITE_API_URL}/health`);
-    const end = performance.now();
-    return Math.round(end - start);
-  }
+    async function checkPing() {
+      const API_URL =
+        import.meta.env.VITE_API_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "");
+      const start = performance.now();
+      await fetch(`${API_URL}/health`);
+      const end = performance.now();
+      return Math.round(end - start);
+    }
   const [ping, setPing] = useState<number | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);

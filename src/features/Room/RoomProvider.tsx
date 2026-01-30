@@ -25,8 +25,12 @@ import {
   type YoutubePlaylist,
 } from "./RoomContext";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
-const API_URL = import.meta.env.VITE_API_URL;
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
 const WORKER_API_URL = import.meta.env.VITE_WORKER_API_URL;
 const DEFAULT_PAGE_SIZE = 50;
 const CHUNK_SIZE = 200;
