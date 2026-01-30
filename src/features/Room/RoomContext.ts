@@ -40,6 +40,19 @@ export interface RoomContextValue {
   youtubePlaylistsError: string | null;
   fetchYoutubePlaylists: () => Promise<void>;
   importYoutubePlaylist: (playlistId: string) => Promise<void>;
+  collections: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+  }>;
+  collectionsLoading: boolean;
+  collectionsError: string | null;
+  selectedCollectionId: string | null;
+  collectionItemsLoading: boolean;
+  collectionItemsError: string | null;
+  fetchCollections: () => Promise<void>;
+  selectCollection: (collectionId: string | null) => void;
+  loadCollectionItems: (collectionId: string) => Promise<void>;
   usernameInput: string;
   setUsernameInput: (value: string) => void;
   username: string | null;

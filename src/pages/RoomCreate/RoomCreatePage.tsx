@@ -27,6 +27,12 @@ const RoomCreatePage: React.FC = () => {
     youtubePlaylists,
     youtubePlaylistsLoading,
     youtubePlaylistsError,
+    collections,
+    collectionsLoading,
+    collectionsError,
+    selectedCollectionId,
+    collectionItemsLoading,
+    collectionItemsError,
     authUser,
     loginWithGoogle,
     setRoomNameInput,
@@ -38,6 +44,9 @@ const RoomCreatePage: React.FC = () => {
     handleResetPlaylist,
     fetchYoutubePlaylists,
     importYoutubePlaylist,
+    fetchCollections,
+    selectCollection,
+    loadCollectionItems,
     handleCreateRoom,
     handleJoinRoom,
     resetCreateState,
@@ -90,6 +99,12 @@ const RoomCreatePage: React.FC = () => {
             youtubePlaylists={youtubePlaylists}
             youtubePlaylistsLoading={youtubePlaylistsLoading}
             youtubePlaylistsError={youtubePlaylistsError}
+            collections={collections}
+            collectionsLoading={collectionsLoading}
+            collectionsError={collectionsError}
+            selectedCollectionId={selectedCollectionId}
+            collectionItemsLoading={collectionItemsLoading}
+            collectionItemsError={collectionItemsError}
             isGoogleAuthed={Boolean(authUser)}
             onGoogleLogin={loginWithGoogle}
             onRoomNameChange={setRoomNameInput}
@@ -100,6 +115,9 @@ const RoomCreatePage: React.FC = () => {
             onResetPlaylist={handleResetPlaylist}
             onFetchYoutubePlaylists={fetchYoutubePlaylists}
             onImportYoutubePlaylist={importYoutubePlaylist}
+            onFetchCollections={fetchCollections}
+            onSelectCollection={selectCollection}
+            onLoadCollectionItems={loadCollectionItems}
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
             showRoomList={false}
