@@ -1,5 +1,22 @@
-import { ExpandMore } from "@mui/icons-material";
-import React, { useEffect, useRef, useState } from "react";
+﻿import {
+  ExpandMore,
+  LibraryMusic,
+  Login,
+  Logout,
+  ManageAccounts,
+  MeetingRoom,
+} from "@mui/icons-material";
+import {
+  Box,
+  Divider,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  MenuList,
+  Popover,
+  Typography,
+} from "@mui/material";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 interface HeaderSectionProps {
@@ -42,8 +59,9 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
       return Math.round(end - start);
     }
   const [ping, setPing] = useState<number | null>(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
+  const isMenuOpen = Boolean(menuAnchorEl);
+  const menuId = isMenuOpen ? "header-menu-popover" : undefined;
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -58,28 +76,52 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
+  const equalizerBars = useMemo(
+    () => [
+      { height: 8, delay: "0s" },
+      { height: 14, delay: "0.12s" },
+      { height: 10, delay: "0.24s" },
+    ],
+    [],
+  );
 
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, []);
+  const handleMenuToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setMenuAnchorEl((prev) => (prev ? null : event.currentTarget));
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
+  const menuItemSx = useMemo(
+    () => ({
+      px: 2,
+      py: 1.1,
+      gap: 1.5,
+      "&:hover": {
+        background:
+          "linear-gradient(90deg, rgba(56, 189, 248, 0.14), rgba(129, 140, 248, 0.08))",
+      },
+      "& .MuiListItemText-primary": {
+        color: "#e2e8f0",
+        fontWeight: 600,
+        fontSize: "0.92rem",
+      },
+      "& .MuiListItemText-secondary": {
+        color: "rgba(148, 163, 184, 0.85)",
+        fontSize: "0.72rem",
+        marginTop: "2px",
+      },
+    }),
+    [],
+  );
   return (
     <header className="mb-3 flex items-center justify-between gap-4">
       <div>
         <h1 className="text-5xl font-semibold bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-transparent">
           MusicQuiz
         </h1>
-        <p className="text-1xl text-slate-400">
-          {/* 打造你的音樂房間，和朋友一起猜歌！ */}
-        </p>
+        <p className="text-1xl text-slate-400" />
       </div>
       <div className="text-right text-shadow-md text-slate-400 space-y-1">
         <div className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-slate-900/80 border border-slate-700">
@@ -87,7 +129,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
           <span className="text-slate-300 text-[11px]">{serverUrl}</span>
         </div>
         <div>
-          連線狀態
+          連線狀態：
           <span
             className={
               isConnected
@@ -99,15 +141,16 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
             {isConnected ? "Connected" : "Disconnected"}
           </span>
         </div>
-        <div className="flex items-center justify-end gap-2" ref={menuRef}>
-          <span>使用者:</span>
+        <div className="flex items-center justify-end gap-2">
+          <span>使用者：</span>
           <div className="relative inline-flex items-center">
             <button
               type="button"
-              onClick={() => setIsMenuOpen((prev) => !prev)}
+              onClick={handleMenuToggle}
               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium text-slate-200 transition-colors hover:bg-slate-800/70"
               aria-haspopup="menu"
               aria-expanded={isMenuOpen}
+              aria-controls={menuId}
             >
               {authUser?.avatar_url ? (
                 <img
@@ -130,74 +173,168 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
                 <ExpandMore />
               </span>
             </button>
-            {isMenuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-950/95 shadow-lg">
-                {authSubLabel && (
-                  <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-800">
-                    {authSubLabel}
-                  </div>
-                )}
-
+            <Popover
+              id={menuId}
+              open={isMenuOpen}
+              anchorEl={menuAnchorEl}
+              onClose={handleMenuClose}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
+              PaperProps={{
+                sx: {
+                  mt: 1.5,
+                  minWidth: 260,
+                  borderRadius: 2.5,
+                  border: "1px solid rgba(148, 163, 184, 0.25)",
+                  background:
+                    "linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98))",
+                  boxShadow:
+                    "0 18px 40px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(14, 165, 233, 0.08)",
+                  backdropFilter: "blur(16px)",
+                  overflow: "hidden",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.6,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 2,
+                  background:
+                    "linear-gradient(90deg, rgba(14, 165, 233, 0.12), rgba(129, 140, 248, 0.05))",
+                }}
+              >
+                <Box>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "rgba(148, 163, 184, 0.8)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.12em",
+                    }}
+                  >
+                    帳號
+                  </Typography>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ color: "#e2e8f0", fontWeight: 700 }}
+                  >
+                    {authLabel}
+                  </Typography>
+                  {authSubLabel && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "rgba(148, 163, 184, 0.85)" }}
+                    >
+                      {authSubLabel}
+                    </Typography>
+                  )}
+                </Box>
+                <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-end" }}>
+                  {equalizerBars.map((bar) => (
+                    <Box
+                      key={bar.delay}
+                      sx={{
+                        width: 4,
+                        height: bar.height,
+                        borderRadius: 999,
+                        background:
+                          "linear-gradient(180deg, rgba(56, 189, 248, 0.95), rgba(129, 140, 248, 0.95))",
+                        transformOrigin: "bottom",
+                        animation: "eqPulse 1.05s ease-in-out infinite",
+                        animationDelay: bar.delay,
+                        "@keyframes eqPulse": {
+                          "0%": { transform: "scaleY(0.6)", opacity: 0.75 },
+                          "50%": { transform: "scaleY(1.4)", opacity: 1 },
+                          "100%": { transform: "scaleY(0.7)", opacity: 0.85 },
+                        },
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+              <Divider sx={{ borderColor: "rgba(148, 163, 184, 0.14)" }} />
+              <MenuList sx={{ py: 0 }}>
                 {authUser ? (
                   <>
-                    <button
-                      type="button"
+                    <MenuItem
                       onClick={() => {
-                        setIsMenuOpen(false);
+                        handleMenuClose();
                         onEditProfile?.();
                       }}
-                      className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                      sx={menuItemSx}
                     >
-                      編輯個人資料
-                    </button>
-                    <button
-                      type="button"
+                      <ListItemIcon sx={{ minWidth: 30, color: "#7dd3fc" }}>
+                        <ManageAccounts fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="編輯個人資料"
+                        secondary="更換暱稱與頭像"
+                      />
+                    </MenuItem>
+                    <MenuItem
                       onClick={() => {
-                        setIsMenuOpen(false);
+                        handleMenuClose();
                         onLogout?.();
                       }}
-                      className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                      sx={menuItemSx}
                     >
-                      Google 登出
-                    </button>
+                      <ListItemIcon sx={{ minWidth: 30, color: "#fca5a5" }}>
+                        <Logout fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText primary="登出" secondary="切換帳號" />
+                    </MenuItem>
                   </>
                 ) : (
-                  <button
-                    type="button"
+                  <MenuItem
                     onClick={() => {
-                      setIsMenuOpen(false);
+                      handleMenuClose();
                       onLogin?.();
                     }}
                     disabled={authLoading}
-                    className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70 disabled:opacity-60"
+                    sx={menuItemSx}
                   >
-                    {authLoading ? "登入中..." : "Google 登入"}
-                  </button>
+                    <ListItemIcon sx={{ minWidth: 30, color: "#38bdf8" }}>
+                      <Login fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={authLoading ? "登入中..." : "使用 Google 登入"}
+                      secondary="同步 YouTube 播放清單"
+                    />
+                  </MenuItem>
                 )}
-                <button
-                  type="button"
+                <Divider sx={{ borderColor: "rgba(148, 163, 184, 0.12)" }} />
+                <MenuItem
                   onClick={() => {
-                    setIsMenuOpen(false);
+                    handleMenuClose();
                     navigate("/rooms");
                   }}
-                  className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                  sx={menuItemSx}
                 >
-                  回主畫面
-                </button>
+                  <ListItemIcon sx={{ minWidth: 30, color: "#fde68a" }}>
+                    <MeetingRoom fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="房間列表" secondary="回到大廳" />
+                </MenuItem>
                 {authUser && (
-                  <button
-                    type="button"
+                  <MenuItem
                     onClick={() => {
-                      setIsMenuOpen(false);
+                      handleMenuClose();
                       navigate("/collections");
                     }}
-                    className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800/70"
+                    sx={menuItemSx}
                   >
-                    自己的收藏庫
-                  </button>
+                    <ListItemIcon sx={{ minWidth: 30, color: "#a7f3d0" }}>
+                      <LibraryMusic fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="收藏庫" secondary="管理題庫" />
+                  </MenuItem>
                 )}
-              </div>
-            )}
+              </MenuList>
+            </Popover>
           </div>
         </div>
         Ping: {ping ? ping + "ms" : "Loading.."}
@@ -207,3 +344,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
 };
 
 export default HeaderSection;
+
+
+
+
