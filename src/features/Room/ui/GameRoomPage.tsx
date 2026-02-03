@@ -86,8 +86,18 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const lastLoadedVideoIdRef = useRef<string | null>(null);
   const lastTrackSessionRef = useRef<string | null>(null);
   const lastPassiveResumeRef = useRef<number>(0);
+  const resumeNeedsSyncRef = useRef(false);
+  const resumeResyncTimerRef = useRef<number | null>(null);
+  const resyncTimersRef = useRef<number[]>([]);
+  const initialResyncTimersRef = useRef<number[]>([]);
+  const initialResyncScheduledRef = useRef(false);
+  const lastPlayerTimeSecRef = useRef<number | null>(null);
+  const lastPlayerTimeAtMsRef = useRef<number>(0);
+  const lastTimeRequestReasonRef = useRef("init");
+  const debugAudioRef = useRef(false);
   const PLAYER_ID = "mq-main-player";
   const DRIFT_TOLERANCE_SEC = 1;
+  const RESUME_DRIFT_TOLERANCE_SEC = 0.4;
   const getServerNowMs = useCallback(
     () => Date.now() + serverOffsetMs,
     [serverOffsetMs],
@@ -95,6 +105,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   useEffect(() => {
     lastSyncMsRef.current = Date.now() + serverOffsetMs;
   }, [serverOffsetMs]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    debugAudioRef.current =
+      params.get("debugAudio") === "1" ||
+      localStorage.getItem("mq_debug_audio") === "1";
+  }, []);
 
   const applyVolume = useCallback((val: number) => {
     const target = iframeRef.current?.contentWindow;
@@ -113,6 +130,17 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       console.error("setVolume failed", err);
     }
   }, []);
+  const debugLog = useCallback(
+    (message: string, data?: Record<string, unknown>) => {
+      if (!debugAudioRef.current) return;
+      if (data) {
+        console.log(`[mq-audio] ${message}`, data);
+        return;
+      }
+      console.log(`[mq-audio] ${message}`);
+    },
+    [],
+  );
 
   const effectiveTrackOrder = useMemo(() => {
     if (gameState.trackOrder?.length) {
@@ -165,7 +193,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     () => {
       const elapsed = Math.max(
         0,
-        Math.floor((getServerNowMs() - gameState.startedAt) / 1000),
+        (getServerNowMs() - gameState.startedAt) / 1000,
       );
       return Math.min(clipEndSec, clipStartSec + elapsed);
     },
@@ -217,6 +245,19 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       console.error(`${func} failed`, err);
     }
   }, []);
+  const requestPlayerTime = useCallback(
+    (reason: string) => {
+      if (!playerReadyRef.current) return;
+      lastTimeRequestReasonRef.current = reason;
+      postCommand("getCurrentTime");
+    },
+    [postCommand],
+  );
+  const getFreshPlayerTimeSec = useCallback(() => {
+    const nowMs = getServerNowMs();
+    if (nowMs - lastPlayerTimeAtMsRef.current > 2000) return null;
+    return lastPlayerTimeSecRef.current;
+  }, [getServerNowMs]);
 
   const loadTrack = useCallback(
     (
@@ -244,19 +285,21 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   );
 
   const startPlayback = useCallback(
-    (forcedPosition?: number) => {
-      if (waitingToStart) return;
+    (forcedPosition?: number, forceSeek = false) => {
+      const serverNowMs = getServerNowMs();
+      if (serverNowMs < gameState.startedAt) return;
       const rawStartPos = forcedPosition ?? computeServerPositionSec();
       const startPos = Math.min(
         clipEndSec,
         Math.max(clipStartSec, rawStartPos),
       );
       const estimated = getEstimatedLocalPositionSec();
-      const needsSeek = Math.abs(estimated - startPos) > DRIFT_TOLERANCE_SEC;
+      const needsSeek =
+        forceSeek || Math.abs(estimated - startPos) > DRIFT_TOLERANCE_SEC;
       if (Math.abs(playerStartRef.current - startPos) > 0.01) {
         playerStartRef.current = startPos;
       }
-      lastSyncMsRef.current = getServerNowMs();
+      lastSyncMsRef.current = serverNowMs;
 
       if (needsSeek) {
         postCommand("seekTo", [startPos, true]);
@@ -264,6 +307,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       postCommand("playVideo");
       hasStartedPlaybackRef.current = true;
       applyVolume(volume);
+      debugLog("startPlayback", {
+        startPos,
+        estimated,
+        needsSeek,
+        forceSeek,
+        serverNowMs,
+      });
     },
     [
       applyVolume,
@@ -272,18 +322,142 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       computeServerPositionSec,
       getEstimatedLocalPositionSec,
       getServerNowMs,
+      gameState.startedAt,
+      debugLog,
       postCommand,
       volume,
-      waitingToStart,
     ],
   );
 
+  const syncToServerPosition = useCallback(
+    (reason: string, forceSeek = false) => {
+      const serverPosition = computeServerPositionSec();
+      const playerTime = getFreshPlayerTimeSec();
+      const estimated = playerTime ?? getEstimatedLocalPositionSec();
+      const drift = Math.abs(estimated - serverPosition);
+      debugLog("sync-check", {
+        reason,
+        serverPosition,
+        playerTime,
+        estimated,
+        drift,
+        forceSeek,
+      });
+      const shouldSeek = drift > RESUME_DRIFT_TOLERANCE_SEC;
+      if (shouldSeek) {
+        startPlayback(serverPosition, true);
+        return true;
+      }
+      playerStartRef.current = serverPosition;
+      lastSyncMsRef.current = getServerNowMs();
+      postCommand("playVideo");
+      hasStartedPlaybackRef.current = true;
+      applyVolume(volume);
+      debugLog("sync-skip-seek", {
+        reason,
+        serverPosition,
+        playerTime,
+        estimated,
+        drift,
+      });
+      return false;
+    },
+    [
+      applyVolume,
+      computeServerPositionSec,
+      debugLog,
+      getEstimatedLocalPositionSec,
+      getFreshPlayerTimeSec,
+      getServerNowMs,
+      postCommand,
+      startPlayback,
+      volume,
+    ],
+  );
 
+  const scheduleResumeResync = useCallback(() => {
+    if (resumeResyncTimerRef.current !== null) {
+      window.clearTimeout(resumeResyncTimerRef.current);
+      resumeResyncTimerRef.current = null;
+    }
+    resyncTimersRef.current.forEach((timerId) =>
+      window.clearTimeout(timerId),
+    );
+    resyncTimersRef.current = [];
+    const checkpoints = [150, 650, 1200];
+    checkpoints.forEach((delayMs) => {
+      const timerId = window.setTimeout(() => {
+        if (!playerReadyRef.current) return;
+        if (getServerNowMs() < gameState.startedAt) return;
+        requestPlayerTime(`resume-${delayMs}`);
+        window.setTimeout(() => {
+          syncToServerPosition(`resume-check-${delayMs}`, delayMs <= 150);
+        }, 120);
+      }, delayMs);
+      resyncTimersRef.current.push(timerId);
+    });
+  }, [
+    getServerNowMs,
+    gameState.startedAt,
+    requestPlayerTime,
+    syncToServerPosition,
+  ]);
+
+  const scheduleInitialResync = useCallback(() => {
+    if (initialResyncScheduledRef.current) return;
+    initialResyncScheduledRef.current = true;
+    initialResyncTimersRef.current.forEach((timerId) =>
+      window.clearTimeout(timerId),
+    );
+    initialResyncTimersRef.current = [];
+    const checkpoints = [1000, 2000, 3000, 4000, 5000];
+    checkpoints.forEach((delayMs, idx) => {
+      const timerId = window.setTimeout(() => {
+        if (!playerReadyRef.current) return;
+        if (getServerNowMs() < gameState.startedAt) return;
+        requestPlayerTime(`initial-${idx + 1}`);
+        window.setTimeout(() => {
+          syncToServerPosition(`initial-check-${idx + 1}`);
+        }, 120);
+      }, delayMs);
+      initialResyncTimersRef.current.push(timerId);
+    });
+  }, [
+    getServerNowMs,
+    gameState.startedAt,
+    requestPlayerTime,
+    syncToServerPosition,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (resumeResyncTimerRef.current !== null) {
+        window.clearTimeout(resumeResyncTimerRef.current);
+      }
+      resyncTimersRef.current.forEach((timerId) =>
+        window.clearTimeout(timerId),
+      );
+      initialResyncTimersRef.current.forEach((timerId) =>
+        window.clearTimeout(timerId),
+      );
+    };
+  }, []);
   // 公布答案切換時，若音樂已在播，保持當前進度並標記載入完畢，避免重新 seek。
   useEffect(() => {
     const interval = setInterval(() => {
       const now = getServerNowMs();
       setNowMs(now);
+      if (
+        resumeNeedsSyncRef.current &&
+        playerReadyRef.current &&
+        now >= gameState.startedAt
+      ) {
+        resumeNeedsSyncRef.current = false;
+        requestPlayerTime("interval-resume");
+        syncToServerPosition("interval-resume", true);
+        scheduleResumeResync();
+        return;
+      }
       if (
         !hasStartedPlaybackRef.current &&
         playerReadyRef.current &&
@@ -293,7 +467,14 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       }
     }, 500);
     return () => clearInterval(interval);
-  }, [getServerNowMs, gameState.startedAt, startPlayback]);
+  }, [
+    getServerNowMs,
+    gameState.startedAt,
+    requestPlayerTime,
+    scheduleResumeResync,
+    startPlayback,
+    syncToServerPosition,
+  ]);
 
   // 如果已在播放且進入公布階段，確保解除載入遮罩
   useEffect(() => {
@@ -381,6 +562,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           hasStartedPlaybackRef.current = true;
           lastSyncMsRef.current = getServerNowMs();
           setLoadedTrackKey(trackLoadKey);
+          requestPlayerTime("state-playing");
+          scheduleInitialResync();
         }
         if (
           (data.info === 2 || data.info === 3) &&
@@ -395,6 +578,22 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           }
         }
       }
+      if (data.event === "infoDelivery") {
+        const info = (data as { info?: { currentTime?: number } }).info;
+        if (typeof info?.currentTime === "number") {
+          lastPlayerTimeSecRef.current = info.currentTime;
+          lastPlayerTimeAtMsRef.current = getServerNowMs();
+          debugLog("infoDelivery", {
+            currentTime: info.currentTime,
+            reason: lastTimeRequestReasonRef.current,
+          });
+          if (resumeNeedsSyncRef.current) {
+            resumeNeedsSyncRef.current = false;
+            syncToServerPosition("infoDelivery", true);
+            scheduleResumeResync();
+          }
+        }
+      }
     };
 
     window.addEventListener("message", handleMessage);
@@ -406,10 +605,15 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     getServerNowMs,
     loadTrack,
     postCommand,
+    requestPlayerTime,
+    scheduleInitialResync,
     startPlayback,
+    syncToServerPosition,
+    debugLog,
     trackLoadKey,
     videoId,
     waitingToStart,
+    scheduleResumeResync,
   ]);
 
   // Load track when cursor changes without recreating iframe.
@@ -457,15 +661,40 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   // When returning from background, re-seek to server time if drifted.
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible") {
+        resumeNeedsSyncRef.current = true;
+        return;
+      }
+      const serverNow = getServerNowMs();
+      setNowMs(serverNow);
       if (!playerReadyRef.current) return;
-      if (waitingToStart) return;
-      startPlayback();
+      if (gameState.startedAt > serverNow) {
+        resumeNeedsSyncRef.current = true;
+        return;
+      }
+      resumeNeedsSyncRef.current = true;
+      postCommand("playVideo");
+      hasStartedPlaybackRef.current = true;
+      applyVolume(volume);
+      requestPlayerTime("visibility");
+      scheduleResumeResync();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
+    window.addEventListener("focus", handleVisibility);
+    return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-  }, [startPlayback, waitingToStart]);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, [
+    computeServerPositionSec,
+    getServerNowMs,
+    applyVolume,
+    postCommand,
+    requestPlayerTime,
+    scheduleResumeResync,
+    gameState.startedAt,
+    volume,
+  ]);
 
   // Keyboard shortcuts for answering (default Q/W/A/S, user customizable via inputs below).
   useEffect(() => {
