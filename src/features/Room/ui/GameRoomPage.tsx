@@ -76,6 +76,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     choiceIndex: number | null;
   }>({ trackIndex: -1, choiceIndex: null });
   const [loadedTrackKey, setLoadedTrackKey] = useState<string | null>(null);
+  const [playerVideoId, setPlayerVideoId] = useState<string | null>(null);
   const { keyBindings } = useKeyBindings();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hasStartedPlaybackRef = useRef(false);
@@ -362,15 +363,14 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       if (data.event === "onReady") {
         playerReadyRef.current = true;
         const currentId = videoId;
-        const currentKey = `${currentId ?? "none"}`;
         if (!currentId) return;
-        if (lastTrackLoadKeyRef.current) return; // already loaded first track
+        if (lastTrackLoadKeyRef.current === trackLoadKey) return;
         const startSec = waitingToStart
           ? clipStartSec
           : computeServerPositionSec();
         playerStartRef.current = startSec;
         loadTrack(currentId, startSec, clipEndSec, !waitingToStart);
-        lastTrackLoadKeyRef.current = currentKey;
+        lastTrackLoadKeyRef.current = trackLoadKey;
         if (!waitingToStart) {
           startPlayback(startSec);
         }
@@ -457,12 +457,15 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   // When returning from background, re-seek to server time if drifted.
   useEffect(() => {
     const handleVisibility = () => {
-      return;
+      if (document.visibilityState !== "visible") return;
+      if (!playerReadyRef.current) return;
+      if (waitingToStart) return;
+      startPlayback();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () =>
       document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  }, [startPlayback, waitingToStart]);
 
   // Keyboard shortcuts for answering (default Q/W/A/S, user customizable via inputs below).
   useEffect(() => {
@@ -512,8 +515,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     onSubmitChoice,
   ]);
 
-  const iframeSrc = videoId
-    ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
+  const effectivePlayerVideoId = playerVideoId ?? videoId;
+  const iframeSrc = effectivePlayerVideoId
+    ? `https://www.youtube-nocookie.com/embed/${effectivePlayerVideoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
     : null;
   // 影片持續渲染，僅用覆蓋層控制可見，避免切換時 iframe 被刷新
   const shouldShowVideo = true;
@@ -763,6 +767,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                   }}
                   ref={iframeRef}
                   onLoad={() => {
+                    if (!playerVideoId && videoId) {
+                      setPlayerVideoId(videoId);
+                    }
                     const target = iframeRef.current?.contentWindow;
                     if (target) {
                       try {
