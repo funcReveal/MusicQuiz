@@ -29,6 +29,7 @@ export interface RoomContextValue {
   authToken: string | null;
   authUser: AuthUser | null;
   authLoading: boolean;
+  refreshAuthToken: () => Promise<string | null>;
   loginWithGoogle: () => void;
   logout: () => void;
   needsNicknameConfirm: boolean;
@@ -85,6 +86,7 @@ export interface RoomContextValue {
   playlistStage: "input" | "preview";
   playlistLocked: boolean;
   lastFetchedPlaylistId: string | null;
+  lastFetchedPlaylistTitle: string | null;
   playlistViewItems: PlaylistItem[];
   playlistHasMore: boolean;
   playlistLoadingMore: boolean;

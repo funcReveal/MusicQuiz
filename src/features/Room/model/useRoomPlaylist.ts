@@ -33,6 +33,7 @@ export type UseRoomPlaylistResult = {
   playlistStage: "input" | "preview";
   playlistLocked: boolean;
   lastFetchedPlaylistId: string | null;
+  lastFetchedPlaylistTitle: string | null;
   questionCount: number;
   questionMin: number;
   questionMaxLimit: number;
@@ -71,9 +72,13 @@ export const useRoomPlaylist = ({
   const [lastFetchedPlaylistId, setLastFetchedPlaylistId] = useState<
     string | null
   >(null);
+  const [lastFetchedPlaylistTitle, setLastFetchedPlaylistTitle] = useState<
+    string | null
+  >(null);
   const [questionCount, setQuestionCount] = useState<number>(() => {
     const saved = getStoredQuestionCount();
-    const initial = typeof saved === "number" ? saved : 10;
+    const initial =
+      typeof saved === "number" && Number.isFinite(saved) ? saved : 10;
     return clampQuestionCount(initial, getQuestionMax(0));
   });
 
@@ -189,6 +194,10 @@ export const useRoomPlaylist = ({
             setPlaylistStage("preview");
             setPlaylistLocked(true);
             setLastFetchedPlaylistId(data.playlistId ?? playlistId);
+            const playlistTitle =
+              youtubePlaylists.find((item) => item.id === playlistId)?.title ??
+              null;
+            setLastFetchedPlaylistTitle(playlistTitle);
             setStatusText(`已載入播放清單，共 ${normalizedItems.length} 首`);
             return;
           }
@@ -225,11 +234,12 @@ export const useRoomPlaylist = ({
         setPlaylistStage("input");
         setPlaylistLocked(false);
         setLastFetchedPlaylistId(null);
+        setLastFetchedPlaylistTitle(null);
       } finally {
         setPlaylistLoading(false);
       }
     },
-    [apiUrl, authToken, refreshAuthToken, setStatusText],
+    [apiUrl, authToken, refreshAuthToken, setStatusText, youtubePlaylists],
   );
 
   const handleFetchPlaylist = useCallback(async () => {
@@ -259,12 +269,11 @@ export const useRoomPlaylist = ({
         playlistUrl,
         playlistId,
       );
-      if (!ok || !payload || "error" in payload) {
-        const message =
-          payload && "error" in payload
-            ? payload.error
-            : "讀取播放清單失敗，請稍後重試";
-        throw new Error(message);
+      if (!ok || !payload) {
+        throw new Error("讀取播放清單失敗，請稍後重試");
+      }
+      if ("error" in payload) {
+        throw new Error(payload.error || "讀取播放清單失敗，請稍後重試");
       }
 
       const data = payload;
@@ -280,6 +289,7 @@ export const useRoomPlaylist = ({
       setPlaylistStage("preview");
       setPlaylistLocked(true);
       setLastFetchedPlaylistId(data.playlistId ?? playlistId);
+      setLastFetchedPlaylistTitle(data.title ?? null);
 
       if (
         data.expectedCount !== null &&
@@ -302,10 +312,17 @@ export const useRoomPlaylist = ({
       setPlaylistStage("input");
       setPlaylistLocked(false);
       setLastFetchedPlaylistId(null);
+      setLastFetchedPlaylistTitle(null);
     } finally {
       setPlaylistLoading(false);
     }
-  }, [apiUrl, lastFetchedPlaylistId, playlistLocked, playlistUrl, setStatusText]);
+  }, [
+    apiUrl,
+    lastFetchedPlaylistId,
+    playlistLocked,
+    playlistUrl,
+    setStatusText,
+  ]);
 
   const handleResetPlaylist = useCallback(() => {
     setPlaylistUrl("");
@@ -315,6 +332,7 @@ export const useRoomPlaylist = ({
     setPlaylistStage("input");
     setPlaylistLocked(false);
     setLastFetchedPlaylistId(null);
+    setLastFetchedPlaylistTitle(null);
     onResetCollection();
     setStatusText("已重置來源，請重新選擇");
   }, [onResetCollection, setStatusText]);
@@ -338,6 +356,7 @@ export const useRoomPlaylist = ({
     setPlaylistStage("input");
     setPlaylistLocked(false);
     setLastFetchedPlaylistId(null);
+    setLastFetchedPlaylistTitle(null);
   }, []);
 
   const resetYoutubePlaylists = useCallback(() => {
@@ -364,6 +383,7 @@ export const useRoomPlaylist = ({
     playlistStage,
     playlistLocked,
     lastFetchedPlaylistId,
+    lastFetchedPlaylistTitle,
     questionCount,
     questionMin: QUESTION_MIN,
     questionMaxLimit,

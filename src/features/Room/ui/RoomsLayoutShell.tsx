@@ -1,5 +1,5 @@
 import React from "react";
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import {
   Button,
   Dialog,
@@ -27,7 +27,6 @@ const RoomsLayoutShell: React.FC = () => {
     openProfileEditor,
     closeProfileEditor,
     displayUsername,
-    isConnected,
     statusText,
     username,
     usernameInput,
@@ -36,15 +35,10 @@ const RoomsLayoutShell: React.FC = () => {
   } = useRoom();
 
   return (
-    <div className="flex min-h-screen bg-slate-900 text-slate-100 justify-center items-start p-4">
+    <div className="flex min-h-screen bg-[var(--mc-bg)] text-[var(--mc-text)] justify-center items-start p-4">
       <div className="flex flex-col w-95/100 space-y-4">
-          <HeaderSection
-            serverUrl={
-              import.meta.env.VITE_SOCKET_URL ||
-              (typeof window !== "undefined" ? window.location.origin : "")
-            }
-            isConnected={isConnected}
-            displayUsername={displayUsername}
+        <HeaderSection
+          displayUsername={displayUsername}
           authUser={authUser}
           authLoading={authLoading}
           onLogin={loginWithGoogle}
@@ -52,7 +46,7 @@ const RoomsLayoutShell: React.FC = () => {
           onEditProfile={openProfileEditor}
         />
 
-        {!username && !authUser && (
+        {!authLoading && !username && !authUser && (
           <LoginPage
             usernameInput={usernameInput}
             onInputChange={setUsernameInput}
@@ -63,10 +57,15 @@ const RoomsLayoutShell: React.FC = () => {
         )}
 
         <Outlet />
-        <footer className="mt-4 flex items-center justify-center gap-4 text-xs text-slate-400">
-          <a href="/privacy" className="hover:text-slate-200">隱私權政策</a>
-          <span className="text-slate-600">·</span>
-          <a href="/terms" className="hover:text-slate-200">服務條款</a>
+
+        <footer className="mt-4 flex items-center justify-center gap-4 text-xs text-[var(--mc-text-muted)]">
+          <Link to="/privacy" className="hover:text-[var(--mc-text)]">
+            隱私權政策
+          </Link>
+          <span className="text-[var(--mc-border)]">•</span>
+          <Link to="/terms" className="hover:text-[var(--mc-text)]">
+            服務條款
+          </Link>
         </footer>
 
         {statusText && (
@@ -81,16 +80,16 @@ const RoomsLayoutShell: React.FC = () => {
           }}
         >
           <DialogTitle>
-            {needsNicknameConfirm ? "首次登入設定暱稱" : "編輯個人資料"}
+            {needsNicknameConfirm ? "請設定暱稱" : "編輯個人資料"}
           </DialogTitle>
           <DialogContent>
-            <p className="text-sm text-slate-300 mb-2">
+            <p className="text-sm text-[var(--mc-text-muted)] mb-2">
               {needsNicknameConfirm
-                ? "初次 Google 登入可修改暱稱，之後也可以再改。"
-                : "更新你在遊戲中顯示的暱稱。"}
+                ? "你已使用 Google 登入，請設定顯示暱稱。之後可在個人資料中修改。"
+                : "請更新你的暱稱。"}
             </p>
             <input
-              className="w-full px-3 py-2 text-sm rounded-lg bg-slate-900 border border-slate-700 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-500/60"
+              className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--mc-surface-strong)] border border-[var(--mc-border)] outline-none focus:border-[var(--mc-accent)] focus:ring-1 focus:ring-[var(--mc-glow)]"
               placeholder="請輸入暱稱"
               value={nicknameDraft}
               onChange={(e) => setNicknameDraft(e.target.value)}
@@ -103,7 +102,7 @@ const RoomsLayoutShell: React.FC = () => {
               </Button>
             )}
             <Button onClick={confirmNickname} variant="contained">
-              儲存
+              確認
             </Button>
           </DialogActions>
         </Dialog>

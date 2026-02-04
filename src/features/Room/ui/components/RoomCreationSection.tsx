@@ -160,12 +160,18 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
     const item = playlistItems[index];
     return (
       <div style={style}>
-        <div className="px-3 py-2 flex items-center gap-2 border-b border-slate-200/80">
+        <div className="px-3 py-2 flex items-center gap-2 border-b border-[var(--mc-border)]">
           <div className="flex flex-1 min-w-0 items-center gap-2 overflow-x-hidden">
             <Avatar
               variant="rounded"
               src={item.thumbnail}
-              sx={{ bgcolor: "#e6d6c3", width: 56, height: 56, fontSize: 14 }}
+              sx={{
+                bgcolor: "rgba(15, 23, 42, 0.8)",
+                width: 56,
+                height: 56,
+                fontSize: 14,
+                color: "rgba(226, 232, 240, 0.8)",
+              }}
             >
               {index + 1}
             </Avatar>
@@ -175,7 +181,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                 className="max-w-99/100 truncate room-create-muted"
               >
                 <a
-                  className="text-slate-900 hover:text-orange-600 transition-colors duration-300"
+                  className="text-[var(--mc-text)] hover:text-[var(--mc-accent)] transition-colors duration-300"
                   href={item.url}
                   target="_blank"
                   rel="noreferrer"
@@ -185,7 +191,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                 </a>
               </Typography>
 
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-[var(--mc-text-muted)]">
                 {item.uploader ?? "Unknown"}
                 {item.duration ? ` · ${item.duration}` : ""}
               </p>
@@ -260,8 +266,8 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             onChange={(_, expanded) => setSettingsExpanded(expanded)}
             sx={{
               borderRadius: 1.5,
-              backgroundColor: "rgba(255,255,255,0.6)",
-              border: "1px solid rgba(18,21,27,0.12)",
+              backgroundColor: "rgba(15, 23, 42, 0.7)",
+              border: "1px solid rgba(148, 163, 184, 0.18)",
               transition:
                 "background-color 200ms ease, border-color 200ms ease",
               "&::before": {
@@ -269,7 +275,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               },
               "&.Mui-disabled": {
                 opacity: 1,
-                backgroundColor: "rgba(255,255,255,0.35)",
+                backgroundColor: "rgba(15, 23, 42, 0.4)",
               },
               "& .MuiButton-root": {
                 transition: "color 200ms ease, border-color 200ms ease",
@@ -279,10 +285,10 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
             <AccordionSummary
               sx={{
                 "& .MuiSvgIcon-root": {
-                  color: "rgba(18,21,27,0.6)",
+                  color: "rgba(148, 163, 184, 0.8)",
                 },
                 "&.Mui-disabled .MuiTypography-root": {
-                  color: "rgba(18,21,27,0.75)",
+                  color: "rgba(148, 163, 184, 0.8)",
                   opacity: 1,
                   transition: "color 200ms ease, opacity 200ms ease",
                 },
@@ -290,7 +296,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   opacity: 1,
                 },
                 "&.Mui-disabled .MuiAccordionSummary-expandIconWrapper": {
-                  color: "rgba(18,21,27,0.5)",
+                  color: "rgba(148, 163, 184, 0.6)",
                 },
               }}
               expandIcon={
@@ -299,7 +305,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                     <LockOutlinedIcon
                       fontSize="small"
                       sx={{
-                        color: "rgba(18,21,27,0.45)",
+                        color: "rgba(148, 163, 184, 0.6)",
                       }}
                     />
                   </Fade>
@@ -307,8 +313,8 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   <ExpandMoreIcon
                     sx={{
                       color: canAdjustQuestions
-                        ? "rgba(18,21,27,0.7)"
-                        : "rgba(18,21,27,0.35)",
+                        ? "rgba(226, 232, 240, 0.8)"
+                        : "rgba(148, 163, 184, 0.5)",
                     }}
                   />
                 )
@@ -501,7 +507,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                     sx={{
                       flex: 1,
                       "& .MuiInput-root.Mui-disabled:before": {
-                        borderBottom: "1px solid rgba(18, 21, 27, 0.4)",
+                        borderBottom: "1px solid rgba(148, 163, 184, 0.4)",
                       },
                     }}
                     slotProps={{ inputLabel: { shrink: true } }}
@@ -575,7 +581,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                             onChange={(e) =>
                               setSelectedYoutubeId(e.target.value)
                             }
-                            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                            className="flex-1 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)] px-3 py-2 text-sm text-[var(--mc-text)]"
                           >
                             <option value="">{"請選擇播放清單"}</option>
                             {youtubePlaylists.map((item) => (
@@ -662,7 +668,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                                 e.target.value ? e.target.value : null,
                               )
                             }
-                            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                            className="flex-1 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)] px-3 py-2 text-sm text-[var(--mc-text)]"
                           >
                             <option value="">{"請選擇收藏庫"}</option>
                             {collections.map((item) => (
