@@ -153,7 +153,6 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
       <CardHeader
         title={
           <Stack direction="row" spacing={1} alignItems="center">
-            <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 inline-block" />
             <Typography variant="subtitle1" className="text-slate-100">
               {currentRoom && currentRoom.name}
             </Typography>
@@ -411,7 +410,7 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                       <Stack
                         direction="row"
                         spacing={1}
-                        // justifyContent="space-between"
+                      // justifyContent="space-between"
                       >
                         <Typography variant="caption" fontWeight={600}>
                           {msg.username}
@@ -479,9 +478,8 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
               <Chip
                 size="small"
                 variant="outlined"
-                label={`${playlistProgress.received}/${playlistProgress.total}${
-                  playlistProgress.ready ? " · 已準備" : ""
-                }`}
+                label={`${playlistProgress.received}/${playlistProgress.total}${playlistProgress.ready ? " · 已準備" : ""
+                  }`}
                 className="text-slate-200 border-slate-600"
               />
             </Stack>

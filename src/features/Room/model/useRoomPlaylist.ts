@@ -316,7 +316,13 @@ export const useRoomPlaylist = ({
     } finally {
       setPlaylistLoading(false);
     }
-  }, [apiUrl, lastFetchedPlaylistId, playlistLocked, playlistUrl, setStatusText]);
+  }, [
+    apiUrl,
+    lastFetchedPlaylistId,
+    playlistLocked,
+    playlistUrl,
+    setStatusText,
+  ]);
 
   const handleResetPlaylist = useCallback(() => {
     setPlaylistUrl("");
