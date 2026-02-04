@@ -45,7 +45,7 @@ const extractYouTubeId = (url: string): string | null => {
 };
 
 const SILENT_AUDIO_SRC =
-  "data:audio/wav;base64,UklGRuQSAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YcASAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  "data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 const GameRoomPage: React.FC<GameRoomPageProps> = ({
   room,
@@ -100,7 +100,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const lastPlayerTimeSecRef = useRef<number | null>(null);
   const lastPlayerTimeAtMsRef = useRef<number>(0);
   const lastTimeRequestReasonRef = useRef("init");
-  const debugAudioRef = useRef(false);
   const PLAYER_ID = "mq-main-player";
   const DRIFT_TOLERANCE_SEC = 1;
   const RESUME_DRIFT_TOLERANCE_SEC = 0.4;
@@ -113,14 +112,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   useEffect(() => {
     lastSyncMsRef.current = Date.now() + serverOffsetMs;
   }, [serverOffsetMs]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    debugAudioRef.current =
-      params.get("debugAudio") === "1" ||
-      localStorage.getItem("mq_debug_audio") === "1";
-  }, []);
-
   const applyVolume = useCallback((val: number) => {
     const target = iframeRef.current?.contentWindow;
     if (!target) return;
@@ -138,17 +129,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       console.error("setVolume failed", err);
     }
   }, []);
-  const debugLog = useCallback(
-    (message: string, data?: Record<string, unknown>) => {
-      if (!debugAudioRef.current) return;
-      if (data) {
-        console.log(`[mq-audio] ${message}`, data);
-        return;
-      }
-      console.log(`[mq-audio] ${message}`);
-    },
-    [],
-  );
 
   const effectiveTrackOrder = useMemo(() => {
     if (gameState.trackOrder?.length) {
@@ -269,6 +249,53 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     return lastPlayerTimeSecRef.current;
   }, [getServerNowMs]);
 
+  const updateMediaSession = useCallback(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
+    if (typeof MediaMetadata === "undefined") return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "Music Quiz",
+        artist: "",
+        album: "",
+      });
+      navigator.mediaSession.playbackState =
+        waitingToStart || isEnded ? "paused" : "playing";
+    } catch (err) {
+      console.error("mediaSession setup failed", err);
+    }
+  }, [isEnded, waitingToStart]);
+
+  const startSilentAudio = useCallback(() => {
+    const audio = silentAudioRef.current;
+    if (!audio) return;
+    audio.loop = true;
+    audio.preload = "auto";
+    audio.muted = false;
+    audio.volume = 0;
+    updateMediaSession();
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        /* ignore autoplay failures */
+      });
+    }
+    window.setTimeout(() => {
+      updateMediaSession();
+    }, 300);
+  }, [updateMediaSession]);
+
+  const stopSilentAudio = useCallback(() => {
+    const audio = silentAudioRef.current;
+    if (!audio) return;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const loadTrack = useCallback(
     (
       id: string,
@@ -314,16 +341,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       if (needsSeek) {
         postCommand("seekTo", [startPos, true]);
       }
+      startSilentAudio();
       postCommand("playVideo");
       hasStartedPlaybackRef.current = true;
       applyVolume(volume);
-      debugLog("startPlayback", {
-        startPos,
-        estimated,
-        needsSeek,
-        forceSeek,
-        serverNowMs,
-      });
     },
     [
       applyVolume,
@@ -333,8 +354,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       getEstimatedLocalPositionSec,
       getServerNowMs,
       gameState.startedAt,
-      debugLog,
       postCommand,
+      startSilentAudio,
       volume,
     ],
   );
@@ -344,20 +365,15 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       reason: string,
       forceSeek = false,
       toleranceSec = RESUME_DRIFT_TOLERANCE_SEC,
+      requirePlayerTime = false,
     ) => {
       const serverPosition = computeServerPositionSec();
       const playerTime = getFreshPlayerTimeSec();
+      if (requirePlayerTime && playerTime === null) {
+        return false;
+      }
       const estimated = playerTime ?? getEstimatedLocalPositionSec();
       const drift = Math.abs(estimated - serverPosition);
-      debugLog("sync-check", {
-        reason,
-        serverPosition,
-        playerTime,
-        estimated,
-        drift,
-        forceSeek,
-        toleranceSec,
-      });
       const shouldSeek =
         drift > toleranceSec || (forceSeek && playerTime === null);
       if (shouldSeek) {
@@ -369,19 +385,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       postCommand("playVideo");
       hasStartedPlaybackRef.current = true;
       applyVolume(volume);
-      debugLog("sync-skip-seek", {
-        reason,
-        serverPosition,
-        playerTime,
-        estimated,
-        drift,
-      });
       return false;
     },
     [
       applyVolume,
       computeServerPositionSec,
-      debugLog,
       getEstimatedLocalPositionSec,
       getFreshPlayerTimeSec,
       getServerNowMs,
@@ -390,56 +398,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       volume,
     ],
   );
-
-  const updateMediaSession = useCallback(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
-      return;
-    if (typeof MediaMetadata === "undefined") return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: "Music Quiz",
-        artist: "",
-        album: "",
-      });
-      navigator.mediaSession.playbackState =
-        waitingToStart || isEnded ? "paused" : "playing";
-    } catch (err) {
-      console.error("mediaSession setup failed", err);
-    }
-  }, [isEnded, waitingToStart]);
-
-  const startSilentAudio = useCallback(
-    (reason: string) => {
-      const audio = silentAudioRef.current;
-      if (!audio) return;
-      audio.loop = true;
-      audio.preload = "auto";
-      audio.muted = false;
-      audio.volume = 0;
-      updateMediaSession();
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch((err) => {
-          debugLog("silent-audio-play-failed", { reason, error: String(err) });
-        });
-      }
-      debugLog("silent-audio-play", {
-        reason,
-        readyState: audio.readyState,
-      });
-    },
-    [debugLog, updateMediaSession],
-  );
-  const stopSilentAudio = useCallback(() => {
-    const audio = silentAudioRef.current;
-    if (!audio) return;
-    try {
-      audio.pause();
-      audio.currentTime = 0;
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const scheduleResumeResync = useCallback(() => {
     if (resumeResyncTimerRef.current !== null) {
@@ -454,10 +412,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     checkpoints.forEach((delayMs) => {
       const timerId = window.setTimeout(() => {
         if (!playerReadyRef.current) return;
+        if (document.visibilityState !== "visible") return;
         if (getServerNowMs() < gameState.startedAt) return;
         requestPlayerTime(`resume-${delayMs}`);
         window.setTimeout(() => {
-          syncToServerPosition(`resume-check-${delayMs}`, delayMs <= 150);
+          syncToServerPosition(`resume-check-${delayMs}`, false, 0.5, true);
         }, 120);
       }, delayMs);
       resyncTimersRef.current.push(timerId);
@@ -480,10 +439,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     checkpoints.forEach((delayMs, idx) => {
       const timerId = window.setTimeout(() => {
         if (!playerReadyRef.current) return;
+        if (document.visibilityState !== "visible") return;
         if (getServerNowMs() < gameState.startedAt) return;
         requestPlayerTime(`initial-${idx + 1}`);
         window.setTimeout(() => {
-          syncToServerPosition(`initial-check-${idx + 1}`);
+          syncToServerPosition(`initial-check-${idx + 1}`, false, 0.8, true);
         }, 120);
       }, delayMs);
       initialResyncTimersRef.current.push(timerId);
@@ -519,9 +479,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         playerReadyRef.current &&
         now >= gameState.startedAt
       ) {
+        if (document.visibilityState !== "visible") {
+          return;
+        }
         resumeNeedsSyncRef.current = false;
         requestPlayerTime("interval-resume");
-        scheduleResumeResync();
         return;
       }
       if (
@@ -545,7 +507,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     getServerNowMs,
     gameState.startedAt,
     requestPlayerTime,
-    scheduleResumeResync,
     startPlayback,
   ]);
 
@@ -560,25 +521,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       stopSilentAudio();
     }
   }, [isEnded, stopSilentAudio]);
-
-  useEffect(() => {
-    const handleUserGesture = () => {
-      startSilentAudio("user-gesture");
-      updateMediaSession();
-    };
-    window.addEventListener("pointerdown", handleUserGesture, {
-      capture: true,
-      once: true,
-    });
-    window.addEventListener("keydown", handleUserGesture, {
-      capture: true,
-      once: true,
-    });
-    return () => {
-      window.removeEventListener("pointerdown", handleUserGesture, true);
-      window.removeEventListener("keydown", handleUserGesture, true);
-    };
-  }, [startSilentAudio, updateMediaSession]);
 
   // Ensure volume is re-applied when the iframe is recreated for a new track.
   useEffect(() => {
@@ -626,17 +568,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         }
       });
       updateMediaSession();
-      let refreshTimer: number | null = null;
-      if (!waitingToStart && !isEnded) {
-        refreshTimer = window.setInterval(() => {
-          updateMediaSession();
-        }, 1500);
-      }
-      return () => {
-        if (refreshTimer !== null) {
-          window.clearInterval(refreshTimer);
-        }
-      };
     } catch (err) {
       console.error("mediaSession setup failed", err);
     }
@@ -694,7 +625,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           setLoadedTrackKey(trackLoadKey);
           requestPlayerTime("state-playing");
           scheduleInitialResync();
-          startSilentAudio("yt-playing");
+          startSilentAudio();
         }
         if (
           (data.info === 2 || data.info === 3) &&
@@ -714,24 +645,28 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         if (typeof info?.currentTime === "number") {
           lastPlayerTimeSecRef.current = info.currentTime;
           lastPlayerTimeAtMsRef.current = getServerNowMs();
-          debugLog("infoDelivery", {
-            currentTime: info.currentTime,
-            reason: lastTimeRequestReasonRef.current,
-          });
-          if (
-            lastTimeRequestReasonRef.current === "watchdog" &&
-            lastPlayerStateRef.current === 1
-          ) {
-            syncToServerPosition(
-              "watchdog",
-              false,
-              WATCHDOG_DRIFT_TOLERANCE_SEC,
+        if (
+          lastTimeRequestReasonRef.current === "watchdog" &&
+          lastPlayerStateRef.current === 1 &&
+          document.visibilityState === "visible"
+        ) {
+          syncToServerPosition(
+            "watchdog",
+            false,
+            WATCHDOG_DRIFT_TOLERANCE_SEC,
             );
           }
           if (resumeNeedsSyncRef.current) {
             resumeNeedsSyncRef.current = false;
-            syncToServerPosition("infoDelivery", true);
-            scheduleResumeResync();
+            const didSeek = syncToServerPosition(
+              "infoDelivery",
+              false,
+              0.5,
+              true,
+            );
+            if (didSeek) {
+              scheduleResumeResync();
+            }
           }
         }
       }
@@ -751,7 +686,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     startPlayback,
     startSilentAudio,
     syncToServerPosition,
-    debugLog,
     trackLoadKey,
     videoId,
     waitingToStart,
@@ -805,6 +739,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") {
         resumeNeedsSyncRef.current = true;
+        resyncTimersRef.current.forEach((timerId) =>
+          window.clearTimeout(timerId),
+        );
+        resyncTimersRef.current = [];
         return;
       }
       const serverNow = getServerNowMs();
@@ -814,13 +752,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         resumeNeedsSyncRef.current = true;
         return;
       }
-      resumeNeedsSyncRef.current = true;
+      resumeNeedsSyncRef.current = false;
       postCommand("playVideo");
       hasStartedPlaybackRef.current = true;
       applyVolume(volume);
-      startSilentAudio("visibility");
+      startSilentAudio();
       requestPlayerTime("visibility");
-      scheduleResumeResync();
+      resumeNeedsSyncRef.current = true;
     };
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", handleVisibility);
@@ -909,7 +847,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     phaseEndsAt === gameState.startedAt || activePhaseDurationMs <= 0
       ? 0
       : ((activePhaseDurationMs - phaseRemainingMs) / activePhaseDurationMs) *
-        100;
+      100;
 
   const sortedParticipants = participants
     .slice()
