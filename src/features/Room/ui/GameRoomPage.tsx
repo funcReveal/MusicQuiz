@@ -98,9 +98,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const lastPlayerTimeSecRef = useRef<number | null>(null);
   const lastPlayerTimeAtMsRef = useRef<number>(0);
   const lastTimeRequestReasonRef = useRef("init");
+  const revealReplayRef = useRef(false);
+  const lastRevealStartKeyRef = useRef<string | null>(null);
   const PLAYER_ID = "mq-main-player";
   const DRIFT_TOLERANCE_SEC = 1;
-  const RESUME_DRIFT_TOLERANCE_SEC = 0.4;
+  const RESUME_DRIFT_TOLERANCE_SEC = 1.2;
   const WATCHDOG_DRIFT_TOLERANCE_SEC = 1.2;
   const WATCHDOG_REQUEST_INTERVAL_MS = 1000;
   const getServerNowMs = useCallback(
@@ -174,6 +176,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     typeof item?.endSec === "number" && item.endSec > clipStartSec
       ? item.endSec
       : clipStartSec + fallbackDurationSec;
+  const revealDurationSec = Math.max(0, gameState.revealDurationMs / 1000);
+  const revealStartAt = gameState.revealEndsAt - gameState.revealDurationMs;
+  const clipLengthSec = Math.max(0.01, clipEndSec - clipStartSec);
 
   const computeServerPositionSec = useCallback(() => {
     const elapsed = Math.max(
@@ -182,6 +187,26 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     );
     return Math.min(clipEndSec, clipStartSec + elapsed);
   }, [clipEndSec, clipStartSec, gameState.startedAt, getServerNowMs]);
+  const computeRevealPositionSec = useCallback(() => {
+    const elapsed = Math.max(0, (getServerNowMs() - revealStartAt) / 1000);
+    const effectiveElapsed =
+      revealDurationSec > 0 ? Math.min(elapsed, revealDurationSec) : elapsed;
+    const offset = clipLengthSec > 0 ? effectiveElapsed % clipLengthSec : 0;
+    return Math.min(clipEndSec, clipStartSec + offset);
+  }, [
+    clipEndSec,
+    clipLengthSec,
+    clipStartSec,
+    getServerNowMs,
+    revealDurationSec,
+    revealStartAt,
+  ]);
+  const getDesiredPositionSec = useCallback(() => {
+    if (revealReplayRef.current) {
+      return computeRevealPositionSec();
+    }
+    return computeServerPositionSec();
+  }, [computeRevealPositionSec, computeServerPositionSec]);
   const getEstimatedLocalPositionSec = useCallback(() => {
     const elapsed = (getServerNowMs() - lastSyncMsRef.current) / 1000;
     return Math.min(clipEndSec, Math.max(0, playerStartRef.current + elapsed));
@@ -201,7 +226,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     selectedChoiceState.trackIndex === currentTrackIndex
       ? selectedChoiceState.choiceIndex
       : null;
-  // 只用曲目索引決定是否重載，避免伺服器在公布階段更新 startedAt 時觸發重載
+
   const trackLoadKey = `${videoId ?? "none"}:${clipStartSec}-${clipEndSec}`;
   const trackSessionKey = `${currentTrackIndex}`;
   const isTrackLoading = loadedTrackKey !== trackLoadKey;
@@ -268,7 +293,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     const playPromise = audio.play();
     if (playPromise && typeof playPromise.catch === "function") {
       playPromise.catch(() => {
-        /* ignore autoplay failures */
+
       });
     }
     window.setTimeout(() => {
@@ -282,8 +307,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     try {
       audio.pause();
       audio.currentTime = 0;
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error("Failed to stop silent audio", err);
     }
   }, []);
 
@@ -314,7 +339,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     (forcedPosition?: number, forceSeek = false) => {
       const serverNowMs = getServerNowMs();
       if (serverNowMs < gameState.startedAt) return;
-      const rawStartPos = forcedPosition ?? computeServerPositionSec();
+      const rawStartPos = forcedPosition ?? getDesiredPositionSec();
       const startPos = Math.min(
         clipEndSec,
         Math.max(clipStartSec, rawStartPos),
@@ -339,8 +364,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       applyVolume,
       clipEndSec,
       clipStartSec,
-      computeServerPositionSec,
       getEstimatedLocalPositionSec,
+      getDesiredPositionSec,
       getServerNowMs,
       gameState.startedAt,
       postCommand,
@@ -356,7 +381,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       toleranceSec = RESUME_DRIFT_TOLERANCE_SEC,
       requirePlayerTime = false,
     ) => {
-      const serverPosition = computeServerPositionSec();
+      const serverPosition = getDesiredPositionSec();
       const playerTime = getFreshPlayerTimeSec();
       if (requirePlayerTime && playerTime === null) {
         return false;
@@ -378,8 +403,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     },
     [
       applyVolume,
-      computeServerPositionSec,
       getEstimatedLocalPositionSec,
+      getDesiredPositionSec,
       getFreshPlayerTimeSec,
       getServerNowMs,
       postCommand,
@@ -403,7 +428,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         if (getServerNowMs() < gameState.startedAt) return;
         requestPlayerTime(`resume-${delayMs}`);
         window.setTimeout(() => {
-          syncToServerPosition(`resume-check-${delayMs}`, false, 0.5, true);
+          syncToServerPosition(
+            `resume-check-${delayMs}`,
+            false,
+            RESUME_DRIFT_TOLERANCE_SEC,
+            true,
+          );
         }, 120);
       }, delayMs);
       resyncTimersRef.current.push(timerId);
@@ -456,7 +486,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       stopSilentAudio();
     };
   }, [stopSilentAudio]);
-  // 公布答案切換時，若音樂已在播，保持當前進度並標記載入完畢，避免重新 seek。
+
   useEffect(() => {
     const interval = setInterval(() => {
       const now = getServerNowMs();
@@ -492,7 +522,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     return () => clearInterval(interval);
   }, [getServerNowMs, gameState.startedAt, requestPlayerTime, startPlayback]);
 
-  // 如果已在播放且進入公布階段，確保解除載入遮罩
   useEffect(() => {
     applyVolume(volume);
     localStorage.setItem("mq_volume", String(volume));
@@ -504,18 +533,16 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     }
   }, [isEnded, stopSilentAudio]);
 
-  // Ensure volume is re-applied when the iframe is recreated for a new track.
   useEffect(() => {
     applyVolume(volume);
   }, [applyVolume, currentTrackIndex, gameState.startedAt, volume]);
 
-  // Override media session to avoid exposing track info and disable remote controls/progress.
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator))
       return;
     if (typeof MediaMetadata === "undefined") return;
     try {
-      const noop = () => {};
+      const noop = () => { };
       const handleMediaSeek = () => {
         resumeNeedsSyncRef.current = true;
         requestPlayerTime("media-seek");
@@ -545,8 +572,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           } else {
             navigator.mediaSession.setActionHandler(action, noop);
           }
-        } catch {
-          /* ignore unsupported actions */
+        } catch (err) {
+          console.error("Failed to set media session action handler", err);
         }
       });
       updateMediaSession();
@@ -621,6 +648,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
             postCommand("playVideo");
           }
         }
+        if (data.info === 0 && isReveal) {
+          revealReplayRef.current = true;
+          startPlayback(computeRevealPositionSec(), true);
+        }
       }
       if (data.event === "infoDelivery") {
         const info = (data as { info?: { currentTime?: number } }).info;
@@ -640,10 +671,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           }
           if (resumeNeedsSyncRef.current) {
             resumeNeedsSyncRef.current = false;
+            if (document.visibilityState !== "visible") {
+              return;
+            }
             const didSeek = syncToServerPosition(
               "infoDelivery",
               false,
-              0.5,
+              RESUME_DRIFT_TOLERANCE_SEC,
               true,
             );
             if (didSeek) {
@@ -660,7 +694,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     clipEndSec,
     clipStartSec,
     computeServerPositionSec,
+    computeRevealPositionSec,
+    getDesiredPositionSec,
     getServerNowMs,
+    isReveal,
     loadTrack,
     postCommand,
     requestPlayerTime,
@@ -674,7 +711,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     scheduleResumeResync,
   ]);
 
-  // Load track when cursor changes without recreating iframe.
   useEffect(() => {
     if (!videoId) return;
     if (!playerReadyRef.current) return;
@@ -686,6 +722,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       playerStartRef.current = computeServerPositionSec();
     }
 
+    revealReplayRef.current = false;
     const autoplay = !waitingToStart;
     const startSec = autoplay ? computeServerPositionSec() : clipStartSec;
     playerStartRef.current = startSec;
@@ -707,7 +744,30 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     clipEndSec,
   ]);
 
-  // Stop audio during countdown and start exactly when countdown finishes.
+  useEffect(() => {
+    if (!isReveal) {
+      revealReplayRef.current = false;
+      lastRevealStartKeyRef.current = null;
+      return;
+    }
+    const revealKey = `${trackLoadKey}:reveal`;
+    if (lastRevealStartKeyRef.current === revealKey) return;
+    lastRevealStartKeyRef.current = revealKey;
+    const serverAtEnd = computeServerPositionSec() >= clipEndSec - 0.05;
+    const playerEnded = lastPlayerStateRef.current === 0;
+    if (serverAtEnd || playerEnded) {
+      revealReplayRef.current = true;
+      startPlayback(computeRevealPositionSec(), true);
+    }
+  }, [
+    clipEndSec,
+    computeRevealPositionSec,
+    computeServerPositionSec,
+    isReveal,
+    startPlayback,
+    trackLoadKey,
+  ]);
+
   useEffect(() => {
     if (waitingToStart) {
       hasStartedPlaybackRef.current = false;
@@ -716,7 +776,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     }
   }, [clipStartSec, postCommand, waitingToStart]);
 
-  // When returning from background, re-seek to server time if drifted.
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") {
@@ -760,7 +819,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     volume,
   ]);
 
-  // Keyboard shortcuts for answering (default Q/W/A/S, user customizable via inputs below).
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -771,7 +829,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         if (active.tagName === "INPUT") {
           const input = active as HTMLInputElement;
           const type = (input.type || "text").toLowerCase();
-          // Allow key bindings even when the volume slider (range) is focused.
           if (type !== "range") {
             return;
           }
@@ -812,7 +869,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const iframeSrc = effectivePlayerVideoId
     ? `https://www.youtube-nocookie.com/embed/${effectivePlayerVideoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
     : null;
-  // 影片持續渲染，僅用覆蓋層控制可見，避免切換時 iframe 被刷新
   const shouldShowVideo = true;
 
   const phaseLabel = isEnded
@@ -829,7 +885,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     phaseEndsAt === gameState.startedAt || activePhaseDurationMs <= 0
       ? 0
       : ((activePhaseDurationMs - phaseRemainingMs) / activePhaseDurationMs) *
-        100;
+      100;
 
   const sortedParticipants = participants
     .slice()
@@ -856,8 +912,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const recentMessages = messages.slice(-80);
 
-  // （預熱暫停使用，以排除干擾播放的可能）
-
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -869,7 +923,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   return (
     <div className="game-room-shell">
       <div className="game-room-grid grid w-full grid-cols-1 gap-3 lg:grid-cols-[400px_1fr] xl:grid-cols-[440px_1fr] lg:h-[calc(100vh-140px)] lg:items-stretch">
-        {/* 左側：分數榜 + 聊天 */}
         <aside className="game-room-panel game-room-panel--left flex h-full flex-col gap-3 p-3 text-slate-50 overflow-hidden">
           <div className="flex items-center gap-3">
             <div>
@@ -910,13 +963,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 return (
                   <div
                     key={p.clientId}
-                    className={`game-room-score-row flex items-center justify-between text-sm ${
-                      gameState.lockedClientIds?.includes(p.clientId)
-                        ? "game-room-score-row--locked"
-                        : ""
-                    } ${
-                      p.clientId === meClientId ? "game-room-score-row--me" : ""
-                    }`}
+                    className={`game-room-score-row flex items-center justify-between text-sm ${gameState.lockedClientIds?.includes(p.clientId)
+                      ? "game-room-score-row--locked"
+                      : ""
+                      } ${p.clientId === meClientId ? "game-room-score-row--me" : ""
+                      }`}
                   >
                     <span className="truncate flex items-center gap-2">
                       {gameState.lockedClientIds?.includes(p.clientId) && (
@@ -933,9 +984,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                     <div className="flex items-center gap-2">
                       {gameState.lockedClientIds?.includes(p.clientId) ? (
                         <Chip
-                          label={`第${
-                            lockedOrder.indexOf(p.clientId) + 1 || "?"
-                          }答`}
+                          label={`第${lockedOrder.indexOf(p.clientId) + 1 || "?"
+                            }答`}
                           size="small"
                           color="success"
                           variant="filled"
@@ -1125,7 +1175,6 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                   )}
                 </div>
               )}
-              {/* 避免換曲瞬間曝光：僅在載入期間遮蔽 */}
               {showLoadingMask && (
                 <div className="pointer-events-none absolute inset-0 bg-slate-950" />
               )}
@@ -1223,92 +1272,91 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                   <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {isInterTrackWait
                       ? Array.from(
-                          {
-                            length: Math.max(4, gameState.choices.length),
-                          },
-                          (_, idx) => (
-                            <Button
-                              key={`placeholder-${idx}`}
-                              fullWidth
-                              size="large"
-                              disabled
-                              variant="outlined"
-                              className="game-room-choice-placeholder justify-start"
-                            >
-                              <div className="flex w-full items-center justify-between">
-                                <span className="truncate text-slate-500">
-                                  下一首準備中
-                                </span>
-                                <span className="ml-3 inline-flex h-6 w-6 flex-none items-center justify-center rounded border border-slate-800 text-[11px] font-semibold text-slate-500">
-                                  —
-                                </span>
-                              </div>
-                            </Button>
-                          ),
-                        )
+                        {
+                          length: Math.max(4, gameState.choices.length),
+                        },
+                        (_, idx) => (
+                          <Button
+                            key={`placeholder-${idx}`}
+                            fullWidth
+                            size="large"
+                            disabled
+                            variant="outlined"
+                            className="game-room-choice-placeholder justify-start"
+                          >
+                            <div className="flex w-full items-center justify-between">
+                              <span className="truncate text-slate-500">
+                                下一首準備中
+                              </span>
+                              <span className="ml-3 inline-flex h-6 w-6 flex-none items-center justify-center rounded border border-slate-800 text-[11px] font-semibold text-slate-500">
+                                —
+                              </span>
+                            </div>
+                          </Button>
+                        ),
+                      )
                       : gameState.choices.map((choice, idx) => {
-                          const isSelected = selectedChoice === choice.index;
-                          const isCorrect = choice.index === correctChoiceIndex;
-                          const isLocked = isReveal || isEnded;
+                        const isSelected = selectedChoice === choice.index;
+                        const isCorrect = choice.index === correctChoiceIndex;
+                        const isLocked = isReveal || isEnded;
 
-                          return (
-                            <Button
-                              key={`${choice.index}-${idx}`}
-                              fullWidth
-                              size="large"
-                              disableRipple
-                              aria-disabled={isLocked}
-                              tabIndex={isLocked ? -1 : 0}
-                              variant={
-                                isReveal
-                                  ? isCorrect || isSelected
-                                    ? "contained"
-                                    : "outlined"
+                        return (
+                          <Button
+                            key={`${choice.index}-${idx}`}
+                            fullWidth
+                            size="large"
+                            disableRipple
+                            aria-disabled={isLocked}
+                            tabIndex={isLocked ? -1 : 0}
+                            variant={
+                              isReveal
+                                ? isCorrect || isSelected
+                                  ? "contained"
+                                  : "outlined"
+                                : isSelected
+                                  ? "contained"
+                                  : "outlined"
+                            }
+                            color={
+                              isReveal
+                                ? isCorrect
+                                  ? "success"
                                   : isSelected
-                                    ? "contained"
-                                    : "outlined"
-                              }
-                              color={
-                                isReveal
-                                  ? isCorrect
-                                    ? "success"
-                                    : isSelected
-                                      ? "error"
-                                      : "info"
-                                  : isSelected
-                                    ? "info"
+                                    ? "error"
                                     : "info"
-                              }
-                              className={`justify-start ${
-                                isReveal
-                                  ? isCorrect
-                                    ? "bg-emerald-700/40"
-                                    : isSelected
-                                      ? "bg-rose-700/40"
-                                      : ""
-                                  : isSelected
-                                    ? "bg-sky-700/30"
-                                    : ""
+                                : isSelected
+                                  ? "info"
+                                  : "info"
+                            }
+                            className={`justify-start ${isReveal
+                              ? isCorrect
+                                ? "bg-emerald-700/40"
+                                : isSelected
+                                  ? "bg-rose-700/40"
+                                  : ""
+                              : isSelected
+                                ? "bg-sky-700/30"
+                                : ""
                               } ${isLocked ? "pointer-events-none" : ""}`}
-                              disabled={false}
-                              onClick={() => {
-                                if (isLocked) return;
-                                setSelectedChoiceState({
-                                  trackIndex: currentTrackIndex,
-                                  choiceIndex: choice.index,
-                                });
-                                onSubmitChoice(choice.index);
-                              }}
-                            >
-                              <div className="flex w-full items-center justify-between">
-                                <span className="truncate">{choice.title}</span>
-                                <span className="ml-3 inline-flex h-6 w-6 flex-none items-center justify-center rounded bg-slate-800 text-[11px] font-semibold text-slate-200 border border-slate-700">
-                                  {(keyBindings[idx] ?? "").toUpperCase()}
-                                </span>
-                              </div>
-                            </Button>
-                          );
-                        })}
+                            disabled={false}
+                            onClick={() => {
+                              if (isLocked) return;
+                              setSelectedChoiceState({
+                                trackIndex: currentTrackIndex,
+                                choiceIndex: choice.index,
+                              });
+                              onSubmitChoice(choice.index);
+                            }}
+                          >
+                            <div className="flex w-full items-center justify-between">
+                              <span className="truncate">{choice.title}</span>
+                              <span className="ml-3 inline-flex h-6 w-6 flex-none items-center justify-center rounded bg-slate-800 text-[11px] font-semibold text-slate-200 border border-slate-700">
+                                {(keyBindings[idx] ?? "").toUpperCase()}
+                              </span>
+                            </div>
+                          </Button>
+                        );
+                      })}
                   </div>
                 </div>
 
