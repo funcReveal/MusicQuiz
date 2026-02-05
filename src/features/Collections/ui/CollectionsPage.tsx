@@ -6,6 +6,7 @@ import {
   Card,
   CardActionArea,
   CardContent,
+  Chip,
   Typography,
 } from "@mui/material";
 import { useRoom } from "../../Room/model/useRoom";
@@ -19,7 +20,7 @@ type DbCollection = {
   owner_id: string;
   title: string;
   description?: string | null;
-  visibility?: string;
+  visibility?: "private" | "public";
 };
 
 const TEXT = {
@@ -275,12 +276,24 @@ const CollectionsPage = () => {
                   className="h-full"
                 >
                   <CardContent>
-                    <Typography
-                      variant="caption"
-                      className="text-[var(--mc-text-muted)]"
-                    >
-                      {TEXT.open}
-                    </Typography>
+                    <Box className="flex items-center justify-between">
+                      <Typography
+                        variant="caption"
+                        className="text-[var(--mc-text-muted)]"
+                      >
+                        {TEXT.open}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={collection.visibility === "public" ? "公開" : "私人"}
+                        variant="outlined"
+                        color={
+                          collection.visibility === "public"
+                            ? "success"
+                            : "default"
+                        }
+                      />
+                    </Box>
                     <Typography
                       variant="h6"
                       className="mt-1 text-[var(--mc-text)]"

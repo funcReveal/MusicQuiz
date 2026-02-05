@@ -13,6 +13,7 @@ import type {
   ClientSocket,
   GameState,
   PlaylistItem,
+  PlaylistSuggestion,
   RoomParticipant,
   RoomState,
   RoomSummary,
@@ -87,6 +88,9 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     total: number;
     ready: boolean;
   }>({ received: 0, total: 0, ready: false });
+  const [playlistSuggestions, setPlaylistSuggestions] = useState<
+    PlaylistSuggestion[]
+  >([]);
   const [inviteRoomId, setInviteRoomId] = useState<string | null>(null);
   const isInviteMode = Boolean(inviteRoomId);
   const [inviteNotFound, setInviteNotFound] = useState(false);
@@ -515,6 +519,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         setPlaylistViewItems([]);
         setPlaylistHasMore(false);
         setPlaylistLoadingMore(false);
+        setPlaylistSuggestions([]);
         setServerOffsetMs(0);
         serverOffsetRef.current = 0;
       },
@@ -533,6 +538,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         setCurrentRoom(state.room);
         setParticipants(state.participants);
         setMessages(state.messages);
+        setPlaylistSuggestions([]);
         setPlaylistProgress({
           received: state.room.playlist.receivedCount,
           total: state.room.playlist.totalCount,
@@ -601,6 +607,29 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         if (gameState?.status === "playing") {
           setIsGameView(true);
         }
+      },
+      onKicked: ({ roomId, reason, bannedUntil }) => {
+        if (roomId !== currentRoomIdRef.current) return;
+        const suffix =
+          typeof bannedUntil === "number"
+            ? `，可重新加入時間：${new Date(bannedUntil).toLocaleTimeString()}`
+            : "，已永久禁止加入";
+        setStatusText(`${reason}${suffix}`);
+        setCurrentRoom(null);
+        setParticipants([]);
+        setMessages([]);
+        setGameState(null);
+        setGamePlaylist([]);
+        setIsGameView(false);
+        setPlaylistViewItems([]);
+        setPlaylistHasMore(false);
+        setPlaylistLoadingMore(false);
+        setPlaylistSuggestions([]);
+        persistRoomId(null);
+      },
+      onPlaylistSuggestionsUpdated: ({ roomId, suggestions }) => {
+        if (roomId !== currentRoomIdRef.current) return;
+        setPlaylistSuggestions(suggestions);
       },
     });
 
@@ -735,7 +764,6 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     fetchPlaylistPage,
     getSocket,
     lastFetchedPlaylistId,
-    lastFetchedPlaylistTitle,
     playlistItems,
     questionCount,
     refreshAuthToken,
@@ -819,6 +847,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         setPlaylistViewItems([]);
         setPlaylistHasMore(false);
         setPlaylistLoadingMore(false);
+        setPlaylistSuggestions([]);
         persistRoomId(null);
         setStatusText("已離開房間");
         onLeft?.();
@@ -900,6 +929,146 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     });
   }, [currentRoom, gameState, getSocket]);
 
+  const handleKickPlayer = useCallback(
+    (targetClientId: string, durationMs?: number | null) => {
+      const s = getSocket();
+      if (!s || !currentRoom) return;
+      s.emit(
+        "kickPlayer",
+        { roomId: currentRoom.id, targetClientId, durationMs },
+        (ack: Ack<null>) => {
+          if (!ack) return;
+          if (!ack.ok) {
+            setStatusText(`踢出失敗：{ack.error}`);
+          }
+        },
+      );
+    },
+    [currentRoom, getSocket],
+  );
+
+  const handleTransferHost = useCallback(
+    (targetClientId: string) => {
+      const s = getSocket();
+      if (!s || !currentRoom) return;
+      s.emit(
+        "transferHost",
+        { roomId: currentRoom.id, targetClientId },
+        (ack: Ack<{ hostClientId: string }>) => {
+          if (!ack) return;
+          if (!ack.ok) {
+            setStatusText(`轉移房主失敗：{ack.error}`);
+          }
+        },
+      );
+    },
+    [currentRoom, getSocket],
+  );
+
+  const handleSuggestPlaylist = useCallback(
+    (type: "collection" | "playlist", value: string) => {
+      const s = getSocket();
+      if (!s || !currentRoom) return;
+      if (gameState?.status === "playing") {
+        setStatusText("遊戲進行中無法推薦");
+        return;
+      }
+      s.emit(
+        "suggestPlaylist",
+        { roomId: currentRoom.id, type, value },
+        (ack: Ack<null>) => {
+          if (!ack) return;
+          if (!ack.ok) {
+            setStatusText(`推薦失敗：{ack.error}`);
+          } else {
+            setStatusText("已送出推薦");
+          }
+        },
+      );
+    },
+    [currentRoom, gameState, getSocket],
+  );
+
+  const handleFetchPlaylistByUrl = useCallback(
+    async (url: string) => {
+      handleResetPlaylist();
+      setPlaylistUrl(url);
+      await handleFetchPlaylist({ url, force: true, lock: false });
+    },
+    [handleFetchPlaylist, handleResetPlaylist, setPlaylistUrl],
+  );
+
+  const handleChangePlaylist = useCallback(async () => {
+    const s = getSocket();
+    if (!s || !currentRoom) return;
+    if (gameState?.status === "playing") {
+      setStatusText("遊戲進行中無法切換歌單");
+      return;
+    }
+    if (playlistItems.length === 0 || !lastFetchedPlaylistId) {
+      setStatusText("請先載入播放清單");
+      return;
+    }
+
+    const uploadId =
+      crypto.randomUUID?.() ??
+      `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+    const normalizedItems = normalizePlaylistItems(playlistItems);
+    const firstChunk = normalizedItems.slice(0, CHUNK_SIZE);
+    const remaining = normalizedItems.slice(CHUNK_SIZE);
+    const isLast = remaining.length === 0;
+
+    s.emit(
+      "changePlaylist",
+      {
+        roomId: currentRoom.id,
+        playlist: {
+          uploadId,
+          id: lastFetchedPlaylistId,
+          title: lastFetchedPlaylistTitle ?? undefined,
+          totalCount: normalizedItems.length,
+          items: firstChunk,
+          isLast,
+          pageSize: DEFAULT_PAGE_SIZE,
+        },
+      },
+      async (ack: Ack<{ receivedCount: number; totalCount: number; ready: boolean }>) => {
+        if (!ack) return;
+        if (!ack.ok) {
+          setStatusText(`切換歌單失敗：{ack.error}`);
+          return;
+        }
+        if (remaining.length > 0) {
+          for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+            const chunk = remaining.slice(i, i + CHUNK_SIZE);
+            const isLastChunk = i + CHUNK_SIZE >= remaining.length;
+            await new Promise<void>((resolve) => {
+              s.emit(
+                "uploadPlaylistChunk",
+                {
+                  roomId: currentRoom.id,
+                  uploadId,
+                  items: chunk,
+                  isLast: isLastChunk,
+                },
+                () => resolve(),
+              );
+            });
+          }
+        }
+        setStatusText("已切換歌單，等待房主開始遊戲");
+      },
+    );
+  }, [
+    currentRoom,
+    gameState?.status,
+    getSocket,
+    lastFetchedPlaylistId,
+    lastFetchedPlaylistTitle,
+    playlistItems,
+    setStatusText,
+  ]);
+
   const resetCreateState = useCallback(() => {
     setRoomNameInput(username ? `${username}'s room` : "我的房間");
     setRoomPasswordInput("");
@@ -965,12 +1134,12 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
 
   const value = useMemo<RoomContextValue>(
     () => ({
-        authToken,
-        authUser,
-        authLoading,
-        refreshAuthToken,
-        loginWithGoogle,
-        logout,
+      authToken,
+      authUser,
+      authLoading,
+      refreshAuthToken,
+      loginWithGoogle,
+      logout,
       needsNicknameConfirm,
       nicknameDraft,
       setNicknameDraft,
@@ -1020,14 +1189,15 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       playlistLoading,
       playlistStage,
       playlistLocked,
-        lastFetchedPlaylistId,
-        lastFetchedPlaylistTitle,
+      lastFetchedPlaylistId,
+      lastFetchedPlaylistTitle,
       playlistViewItems,
       playlistHasMore,
       playlistLoadingMore,
       playlistPageCursor,
       playlistPageSize,
       playlistProgress,
+      playlistSuggestions,
       questionCount,
       questionMin,
       questionMax: QUESTION_MAX,
@@ -1052,6 +1222,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       handleSendMessage,
       handleStartGame,
       handleSubmitChoice,
+      handleKickPlayer,
+      handleTransferHost,
+      handleSuggestPlaylist,
+      handleChangePlaylist,
+      handleFetchPlaylistByUrl,
       handleFetchPlaylist,
       handleResetPlaylist,
       loadMorePlaylist,
@@ -1062,12 +1237,12 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       resetCreateState,
     }),
     [
-        authToken,
-        authUser,
-        authLoading,
-        refreshAuthToken,
-        loginWithGoogle,
-        logout,
+      authToken,
+      authUser,
+      authLoading,
+      refreshAuthToken,
+      loginWithGoogle,
+      logout,
       needsNicknameConfirm,
       nicknameDraft,
       setNicknameDraft,
@@ -1112,12 +1287,14 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       playlistStage,
       playlistLocked,
       lastFetchedPlaylistId,
+      lastFetchedPlaylistTitle,
       playlistViewItems,
       playlistHasMore,
       playlistLoadingMore,
       playlistPageCursor,
       playlistPageSize,
       playlistProgress,
+      playlistSuggestions,
       questionCount,
       questionMin,
       questionStep,
@@ -1141,6 +1318,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       handleSendMessage,
       handleStartGame,
       handleSubmitChoice,
+      handleKickPlayer,
+      handleTransferHost,
+      handleSuggestPlaylist,
+      handleChangePlaylist,
+      handleFetchPlaylistByUrl,
       syncServerOffset,
       handleFetchPlaylist,
       handleResetPlaylist,

@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   GameState,
   PlaylistItem,
+  PlaylistSuggestion,
   RoomParticipant,
   RoomState,
   RoomSummary,
@@ -48,13 +49,14 @@ export interface RoomContextValue {
     id: string;
     title: string;
     description?: string | null;
+    visibility?: "private" | "public";
   }>;
   collectionsLoading: boolean;
   collectionsError: string | null;
   selectedCollectionId: string | null;
   collectionItemsLoading: boolean;
   collectionItemsError: string | null;
-  fetchCollections: () => Promise<void>;
+  fetchCollections: (scope?: "owner" | "public") => Promise<void>;
   selectCollection: (collectionId: string | null) => void;
   loadCollectionItems: (collectionId: string) => Promise<void>;
   usernameInput: string;
@@ -93,6 +95,7 @@ export interface RoomContextValue {
   playlistPageCursor: number;
   playlistPageSize: number;
   playlistProgress: { received: number; total: number; ready: boolean };
+  playlistSuggestions: PlaylistSuggestion[];
   questionCount: number;
   questionMin: number;
   questionMax: number;
@@ -117,7 +120,16 @@ export interface RoomContextValue {
   handleSendMessage: () => void;
   handleStartGame: () => void;
   handleSubmitChoice: (choiceIndex: number) => void;
-  handleFetchPlaylist: () => Promise<void>;
+  handleKickPlayer: (targetClientId: string, durationMs?: number | null) => void;
+  handleTransferHost: (targetClientId: string) => void;
+  handleSuggestPlaylist: (type: "collection" | "playlist", value: string) => void;
+  handleChangePlaylist: () => Promise<void>;
+  handleFetchPlaylistByUrl: (url: string) => Promise<void>;
+  handleFetchPlaylist: (options?: {
+    url?: string;
+    force?: boolean;
+    lock?: boolean;
+  }) => Promise<void>;
   handleResetPlaylist: () => void;
   loadMorePlaylist: () => void;
   updateQuestionCount: (value: number) => void;

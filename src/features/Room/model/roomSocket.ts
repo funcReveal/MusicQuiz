@@ -5,6 +5,7 @@ import type {
   ClientSocket,
   GameState,
   PlaylistState,
+  PlaylistSuggestion,
   RoomParticipant,
   RoomState,
   RoomSummary,
@@ -38,6 +39,15 @@ type RoomSocketHandlers = {
     roomId: string;
     gameState: GameState;
     serverNow: number;
+  }) => void;
+  onKicked?: (payload: {
+    roomId: string;
+    reason: string;
+    bannedUntil: number | null;
+  }) => void;
+  onPlaylistSuggestionsUpdated?: (payload: {
+    roomId: string;
+    suggestions: PlaylistSuggestion[];
   }) => void;
 };
 
@@ -74,6 +84,10 @@ export const connectRoomSocket = (
   );
   socket.on("gameStarted", (payload) => handlers.onGameStarted?.(payload));
   socket.on("gameUpdated", (payload) => handlers.onGameUpdated?.(payload));
+  socket.on("kicked", (payload) => handlers.onKicked?.(payload));
+  socket.on("playlistSuggestionsUpdated", (payload) =>
+    handlers.onPlaylistSuggestionsUpdated?.(payload),
+  );
 
   return socket;
 };

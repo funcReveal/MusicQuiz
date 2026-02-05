@@ -72,7 +72,7 @@ export type WorkerCollection = {
   owner_id: string;
   title: string;
   description: string | null;
-  visibility: string;
+  visibility: "private" | "public";
   version: number;
   use_count: number;
   counts_last_use_id: number;
@@ -214,31 +214,41 @@ export const apiUpsertWorkerUser = (
 
 export const apiFetchCollections = (
   workerUrl: string,
-  token: string,
-  ownerId?: string,
-  pageSize?: number,
+  options: {
+    token?: string | null;
+    ownerId?: string;
+    visibility?: "public" | "private";
+    pageSize?: number;
+  },
 ) => {
   const url = new URL(`${workerUrl}/collections`);
-  if (ownerId) {
-    url.searchParams.set("owner_id", ownerId);
+  if (options.ownerId) {
+    url.searchParams.set("owner_id", options.ownerId);
   }
-  if (pageSize !== undefined) {
-    url.searchParams.set("pageSize", String(pageSize));
+  if (options.visibility) {
+    url.searchParams.set("visibility", options.visibility);
   }
+  if (options.pageSize !== undefined) {
+    url.searchParams.set("pageSize", String(options.pageSize));
+  }
+  const headers = options.token
+    ? { Authorization: `Bearer ${options.token}` }
+    : undefined;
   return fetchJson<WorkerListPayload<WorkerCollection>>(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
   });
 };
 
 export const apiFetchCollectionItems = (
   workerUrl: string,
-  token: string,
+  token: string | null,
   collectionId: string,
   pageSize: number,
 ) => {
   const url = new URL(`${workerUrl}/collections/${collectionId}/items`);
   url.searchParams.set("pageSize", String(pageSize));
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
   return fetchJson<WorkerListPayload<WorkerCollectionItem>>(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
   });
 };
