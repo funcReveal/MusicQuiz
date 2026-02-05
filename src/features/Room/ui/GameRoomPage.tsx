@@ -810,7 +810,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const effectivePlayerVideoId = playerVideoId ?? videoId;
   const iframeSrc = effectivePlayerVideoId
-    ? `https://www.youtube-nocookie.com/embed/${effectivePlayerVideoId}?autoplay=0&controls=0&disablekb=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1&fs=0`
+    ? `https://www.youtube-nocookie.com/embed/${effectivePlayerVideoId}?autoplay=0&controls=1&enablejsapi=1&rel=0&playsinline=1`
     : null;
   // 影片持續渲染，僅用覆蓋層控制可見，避免切換時 iframe 被刷新
   const shouldShowVideo = true;

@@ -22,6 +22,5 @@ export const STORAGE_KEYS = {
   roomId: "mq_roomId",
   questionCount: "mq_questionCount",
   roomPasswordPrefix: "mq_roomPassword:",
-  hasRefresh: "mq_hasRefresh",
   profileConfirmedPrefix: "mq_profileConfirmed:",
 } as const;

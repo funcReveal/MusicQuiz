@@ -1,7 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { Box, Button } from "@mui/material";
+import { Button } from "@mui/material";
 import { useRoom } from "../../Room/model/useRoom";
 import type { DbCollection, EditableItem } from "./lib/editTypes";
 import {
@@ -12,6 +12,7 @@ import { useCollectionEditor } from "../model/useCollectionEditor";
 import { useCollectionLoader } from "../model/useCollectionLoader";
 import CollectionPopover from "./components/CollectionPopover";
 import ClipEditorPanel from "./components/ClipEditorPanel";
+import AnswerPanel from "./components/AnswerPanel";
 import EditHeader from "./components/EditHeader";
 import PlaylistListPanel from "./components/PlaylistListPanel";
 import PlaylistPopover from "./components/PlaylistPopover";
@@ -64,6 +65,7 @@ const TEXT = {
 
 const START_TIME_LABEL = "開始時間 (mm:ss)";
 const END_TIME_LABEL = "結束時間 (mm:ss)";
+const ANSWER_MAX_LENGTH = 80;
 const PLAY_LABEL = "播放";
 const PAUSE_LABEL = "暫停";
 const VOLUME_LABEL = "音量";
@@ -121,6 +123,8 @@ const EditPage = () => {
   } | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
+  const baselineSnapshotRef = useRef<string>("");
+  const baselineReadyRef = useRef(false);
   const dirtyCounterRef = useRef(0);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
 
@@ -217,13 +221,35 @@ const EditPage = () => {
   const markDirty = useCallback(() => {
     dirtyCounterRef.current += 1;
     setHasUnsavedChanges(true);
-    if (saveStatus !== "idle") {
-      setSaveStatus("idle");
-    }
-    if (saveError) {
-      setSaveError(null);
-    }
-  }, [saveError, saveStatus]);
+    setSaveStatus((prev) => (prev !== "idle" ? "idle" : prev));
+    setSaveError((prev) => (prev ? null : prev));
+  }, []);
+
+  const buildSnapshot = useCallback(
+    (
+      items: EditableItem[],
+      title: string,
+      deletes: string[],
+    ): string => {
+      const payload = {
+        title: title.trim(),
+        items: items.map((item, idx) => ({
+          key: item.dbId ?? item.localId,
+          sort: idx,
+          videoId: extractVideoId(item.url) ?? item.url ?? "",
+          title: item.title ?? "",
+          uploader: item.uploader ?? "",
+          duration: item.duration ?? "",
+          startSec: Math.floor(item.startSec ?? 0),
+          endSec: Math.floor(item.endSec ?? 0),
+          answerText: item.answerText ?? "",
+        })),
+        deletes: [...deletes].sort(),
+      };
+      return JSON.stringify(payload);
+    },
+    [extractVideoId],
+  );
 
   const showAutoSaveNotice = (type: "success" | "error", message: string) => {
     setAutoSaveNotice({ type, message });
@@ -236,10 +262,19 @@ const EditPage = () => {
   };
 
   const ownerId = authUser?.id ?? null;
-  const setSelectedIndexSafe = useCallback((idx: number) => {
-    pendingSelectedIndexRef.current = idx;
-  }, []);
-
+  const resetBaseline = useCallback(() => {
+    baselineSnapshotRef.current = buildSnapshot(
+      playlistItems,
+      collectionTitle,
+      pendingDeleteIds,
+    );
+    baselineReadyRef.current = true;
+  }, [buildSnapshot, collectionTitle, pendingDeleteIds, playlistItems]);
+  const handleSavedBaseline = useCallback(() => {
+    window.setTimeout(() => {
+      resetBaseline();
+    }, 0);
+  }, [resetBaseline]);
   useCollectionLoader({
     authToken,
     ownerId,
@@ -256,7 +291,6 @@ const EditPage = () => {
     setPlaylistItems,
     setItemsLoading,
     setItemsError,
-    setSelectedIndex: setSelectedIndexSafe,
     setHasUnsavedChanges,
     setSaveStatus,
     setSaveError,
@@ -287,6 +321,7 @@ const EditPage = () => {
       navigate(`/collections/${id}/edit`, { replace: true }),
     markDirty,
     refreshAuthToken,
+    onSaved: handleSavedBaseline,
   });
   const isReadOnly = !authToken;
   useEffect(() => {
@@ -296,6 +331,8 @@ const EditPage = () => {
       setActiveCollectionId(null);
       setCollectionTitle("");
     }
+    baselineReadyRef.current = false;
+    baselineSnapshotRef.current = "";
     setPlaylistItems([]);
     setPendingDeleteIds([]);
     setSelectedItemId(null);
@@ -306,6 +343,35 @@ const EditPage = () => {
     setAutoSaveNotice(null);
     dirtyCounterRef.current = 0;
   }, [collectionId]);
+
+  useEffect(() => {
+    if (itemsLoading || itemsError) return;
+    if (!baselineReadyRef.current) {
+      resetBaseline();
+    }
+  }, [itemsLoading, itemsError, resetBaseline]);
+
+  useEffect(() => {
+    if (!baselineReadyRef.current) return;
+    const snapshot = buildSnapshot(
+      playlistItems,
+      collectionTitle,
+      pendingDeleteIds,
+    );
+    const isDirty = snapshot !== baselineSnapshotRef.current;
+    if (isDirty !== hasUnsavedChanges) {
+      setHasUnsavedChanges(isDirty);
+    }
+    if (!isDirty) {
+      dirtyCounterRef.current = 0;
+    }
+  }, [
+    playlistItems,
+    collectionTitle,
+    pendingDeleteIds,
+    buildSnapshot,
+    hasUnsavedChanges,
+  ]);
 
   useEffect(() => {
     if (!lastFetchedPlaylistTitle) return;
@@ -510,11 +576,21 @@ const EditPage = () => {
           if (nextEnd <= item.startSec) {
             nextEnd = Math.min(cap, item.startSec + 1);
           }
-          const nextDuration = formatSeconds(cap);
-          if (item.duration !== nextDuration || item.endSec !== nextEnd) {
+          const prevDurationSec = parseDurationToSeconds(item.duration) ?? null;
+          const shouldUpdateDuration =
+            prevDurationSec === null || Math.abs(cap - prevDurationSec) >= 2;
+          const nextDuration = shouldUpdateDuration
+            ? formatSeconds(cap)
+            : item.duration;
+          if (item.endSec !== nextEnd) {
             didUpdate = true;
           }
-          return { ...item, duration: nextDuration, endSec: nextEnd };
+          if (shouldUpdateDuration && item.duration !== nextDuration) {
+            didUpdate = true;
+          }
+          return shouldUpdateDuration
+            ? { ...item, duration: nextDuration, endSec: nextEnd }
+            : { ...item, endSec: nextEnd };
         }),
       );
       if (didUpdate) {
@@ -557,12 +633,10 @@ const EditPage = () => {
       videoId: selectedVideoId,
       playerVars: {
         autoplay: 0,
-        controls: 0,
+        controls: 1,
         rel: 0,
         playsinline: 1,
         start: Math.floor(selectedStartRef.current),
-        disablekb: 1,
-        modestbranding: 1,
       },
       events: {
         onReady: (event: YTPlayerEvent) => {
@@ -722,6 +796,7 @@ const EditPage = () => {
     }
     currentVideoItemIdRef.current = selectedItem.localId;
     const nextId = selectedItem.localId;
+    if (lastSelectedIdRef.current === nextId) return;
     if (reorderRef.current && reorderSelectedIdRef.current === nextId) {
       reorderRef.current = false;
       return;
@@ -741,7 +816,24 @@ const EditPage = () => {
     setCurrentTimeSec(nextStart);
     shouldSeekToStartRef.current = true;
     selectedStartRef.current = nextStart;
-  }, [selectedItem, maxSec]);
+  }, [selectedItemId, maxSec]);
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    const nextStart = Math.min(selectedItem.startSec, maxSec);
+    const nextEnd = Math.min(
+      Math.max(selectedItem.endSec, nextStart + 1),
+      maxSec,
+    );
+    if (nextStart !== startSec) {
+      setStartSec(nextStart);
+      setStartTimeInput(formatSeconds(nextStart));
+    }
+    if (nextEnd !== endSec) {
+      setEndSec(nextEnd);
+      setEndTimeInput(formatSeconds(nextEnd));
+    }
+  }, [selectedItem?.startSec, selectedItem?.endSec, maxSec, startSec, endSec]);
 
   const updateSelectedItem = (updates: Partial<EditableItem>) => {
     setPlaylistItems((prev) =>
@@ -1153,14 +1245,6 @@ const EditPage = () => {
     }
   };
 
-  const nudgeStart = (delta: number) => {
-    handleStartChange(startSec + delta);
-  };
-
-  const nudgeEnd = (delta: number) => {
-    handleEndChange(endSec + delta);
-  };
-
   if (authLoading) {
     return (
       <div className="flex flex-col w-95/100 space-y-4">
@@ -1195,7 +1279,7 @@ const EditPage = () => {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-none flex-col gap-3 overflow-x-hidden">
+    <div className="mx-auto flex w-full max-w-none flex-col gap-3 overflow-x-hidden min-h-0">
       {/* <div className="w-full md:w-full lg:w-3/5 mx-auto space-y-4"> */}
       <EditHeader
         title={collectionTitle}
@@ -1300,7 +1384,7 @@ const EditPage = () => {
         playlistAddError={playlistAddError}
       />
       <div
-        className={`rounded-2xl border border-[var(--mc-border)] bg-[var(--mc-surface)]/80 p-4 shadow-[0_24px_60px_-36px_rgba(2,6,23,0.9)] overflow-x-hidden ${
+        className={`rounded-2xl border border-[var(--mc-border)] bg-[var(--mc-surface)]/80 p-1 shadow-[0_24px_60px_-36px_rgba(2,6,23,0.9)] overflow-hidden min-h-0 ${
           isReadOnly ? "pointer-events-none opacity-60" : ""
         }`}
       >
@@ -1311,152 +1395,164 @@ const EditPage = () => {
           itemsError={itemsError}
           loadingLabel={LOADING_LABEL}
         />
-        <Box display={"flex"} gap={3} className="mt-2 min-w-0 flex-wrap">
-          <Box flexGrow={1} className="min-w-0">
+        <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="order-2 lg:order-2 min-w-0">
             {playlistItems.length > 0 && (
-              <div className="space-y-3">
-                {/* <div className="text-sm text-[var(--mc-text-muted)]">
-                  {TEXT.playlistCount}
-                  {playlistItems.length}
-                  {TEXT.songsUnit}
-                </div> */}
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
-                  <PlaylistListPanel
-                    items={playlistItems}
-                    selectedIndex={selectedIndex}
-                    onSelect={handleSelectIndex}
-                    onRemove={removeItem}
-                    onMove={moveItem}
-                    onReorder={moveItem}
-                    listRef={listContainerRef}
-                    registerItemRef={(node, id) => {
-                      if (!node) {
-                        itemRefs.current.delete(id);
-                        return;
-                      }
-                      itemRefs.current.set(id, node);
-                    }}
-                    highlightIndex={highlightIndex}
-                    clipDurationLabel={CLIP_DURATION_LABEL}
-                    formatSeconds={formatSeconds}
-                    onAddSingleToggle={() => setSingleTrackOpen(true)}
-                    singleTrackOpen={singleTrackOpen}
-                    singleTrackUrl={singleTrackUrl}
-                    singleTrackTitle={singleTrackTitle}
-                    singleTrackAnswer={singleTrackAnswer}
-                    singleTrackError={singleTrackError}
-                    singleTrackLoading={singleTrackLoading}
-                    isDuplicate={isDuplicate}
-                    canEditSingleMeta={canEditSingleMeta}
-                    onSingleTrackUrlChange={(value) => setSingleTrackUrl(value)}
-                    onSingleTrackTitleChange={(value) =>
-                      setSingleTrackTitle(value)
-                    }
-                    onSingleTrackAnswerChange={(value) =>
-                      setSingleTrackAnswer(value)
-                    }
-                    onSingleTrackCancel={() => {
-                      setSingleTrackOpen(false);
-                      setSingleTrackError(null);
-                    }}
-                    onAddSingle={handleAddSingleTrack}
-                  />
-                  <div className="space-y-2 min-w-0 lg:order-1">
-                    <PlayerPanel
-                      selectedVideoId={selectedVideoId}
-                      selectedTitle={selectedItem?.title ?? TEXT.selectSong}
-                      selectedUploader={selectedItem?.uploader ?? ""}
-                      selectedDuration={selectedItem?.duration}
-                      selectedClipDurationLabel={CLIP_DURATION_LABEL}
-                      selectedClipDurationSec={formatSeconds(
-                        selectedClipDurationSec,
-                      )}
-                      clipCurrentSec={formatSeconds(clipCurrentSec)}
-                      clipDurationSec={formatSeconds(clipDurationSec)}
-                      clipProgressPercent={clipProgressPercent}
-                      startSec={startSec}
-                      effectiveEnd={effectiveEnd}
-                      currentTimeSec={currentTimeSec}
-                      onProgressChange={handleProgressChange}
-                      onTogglePlayback={togglePlayback}
-                      isPlayerReady={isPlayerReady}
-                      isPlaying={isPlaying}
-                      onVolumeChange={handleVolumeChange}
-                      volume={volume}
-                      autoPlayOnSwitch={autoPlayOnSwitch}
-                      onAutoPlayChange={handleAutoPlayToggle}
-                      autoPlayLabel="切換自動播放"
-                      loopEnabled={loopEnabled}
-                      onLoopChange={handleLoopToggle}
-                      loopLabel="循環播放"
-                      playLabel={PLAY_LABEL}
-                      pauseLabel={PAUSE_LABEL}
-                      volumeLabel={VOLUME_LABEL}
-                      noSelectionLabel={TEXT.noSelection}
-                      playerContainerRef={playerContainerRef}
-                      thumbnail={selectedItem?.thumbnail}
-                    />
-
-                    <ClipEditorPanel
-                      title={TEXT.editTime}
-                      startLabel={TEXT.start}
-                      endLabel={TEXT.end}
-                      startTimeLabel={START_TIME_LABEL}
-                      endTimeLabel={END_TIME_LABEL}
-                      startSec={startSec}
-                      endSec={endSec}
-                      maxSec={maxSec}
-                      onRangeChange={handleRangeChange}
-                      onRangeCommit={handleRangeCommit}
-                      onStartThumbPress={handleStartThumbPress}
-                      onEndThumbPress={handleEndThumbPress}
-                      formatSeconds={formatSeconds}
-                      startTimeInput={startTimeInput}
-                      endTimeInput={endTimeInput}
-                      onStartInputChange={(value) => setStartTimeInput(value)}
-                      onEndInputChange={(value) => setEndTimeInput(value)}
-                      onStartBlur={() => {
-                        const parsed = parseTimeInput(startTimeInput);
-                        if (parsed === null) {
-                          setStartTimeInput(formatSeconds(startSec));
-                          return;
-                        }
-                        handleStartChange(parsed);
-                      }}
-                      onEndBlur={() => {
-                        const parsed = parseTimeInput(endTimeInput);
-                        if (parsed === null) {
-                          setEndTimeInput(formatSeconds(endSec));
-                          return;
-                        }
-                        handleEndChange(parsed);
-                      }}
-                      onStartKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      onEndKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      onNudgeStart={nudgeStart}
-                      onNudgeEnd={nudgeEnd}
-                      answerLabel={TEXT.answer}
-                      answerValue={answerText}
-                      answerPlaceholder={TEXT.answerPlaceholder}
-                      onAnswerChange={(value) => {
-                        setAnswerText(value);
-                        updateSelectedItem({ answerText: value });
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
+              <PlaylistListPanel
+                items={playlistItems}
+                selectedIndex={selectedIndex}
+                onSelect={handleSelectIndex}
+                onRemove={removeItem}
+                onMove={moveItem}
+                onReorder={moveItem}
+                listRef={listContainerRef}
+                registerItemRef={(node, id) => {
+                  if (!node) {
+                    itemRefs.current.delete(id);
+                    return;
+                  }
+                  itemRefs.current.set(id, node);
+                }}
+                highlightIndex={highlightIndex}
+                clipDurationLabel={CLIP_DURATION_LABEL}
+                formatSeconds={formatSeconds}
+                onAddSingleToggle={() => setSingleTrackOpen(true)}
+                singleTrackOpen={singleTrackOpen}
+                singleTrackUrl={singleTrackUrl}
+                singleTrackTitle={singleTrackTitle}
+                singleTrackAnswer={singleTrackAnswer}
+                singleTrackError={singleTrackError}
+                singleTrackLoading={singleTrackLoading}
+                isDuplicate={isDuplicate}
+                canEditSingleMeta={canEditSingleMeta}
+                onSingleTrackUrlChange={(value) => setSingleTrackUrl(value)}
+                onSingleTrackTitleChange={(value) => setSingleTrackTitle(value)}
+                onSingleTrackAnswerChange={(value) =>
+                  setSingleTrackAnswer(value)
+                }
+                onSingleTrackCancel={() => {
+                  setSingleTrackOpen(false);
+                  setSingleTrackError(null);
+                }}
+                onAddSingle={handleAddSingleTrack}
+              />
             )}
-          </Box>
-        </Box>
+          </div>
+          <div className="order-1 lg:order-1 min-w-0 space-y-2">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_220px]">
+              <PlayerPanel
+                selectedVideoId={selectedVideoId}
+                selectedTitle={selectedItem?.title ?? TEXT.selectSong}
+                selectedUploader={selectedItem?.uploader ?? ""}
+                selectedDuration={selectedItem?.duration}
+                selectedClipDurationLabel={CLIP_DURATION_LABEL}
+                selectedClipDurationSec={formatSeconds(selectedClipDurationSec)}
+                clipCurrentSec={formatSeconds(clipCurrentSec)}
+                clipDurationSec={formatSeconds(clipDurationSec)}
+                clipProgressPercent={clipProgressPercent}
+                startSec={startSec}
+                effectiveEnd={effectiveEnd}
+                currentTimeSec={currentTimeSec}
+                onProgressChange={handleProgressChange}
+                onTogglePlayback={togglePlayback}
+                isPlayerReady={isPlayerReady}
+                isPlaying={isPlaying}
+                onVolumeChange={handleVolumeChange}
+                volume={volume}
+                autoPlayOnSwitch={autoPlayOnSwitch}
+                onAutoPlayChange={handleAutoPlayToggle}
+                autoPlayLabel="切換自動播放"
+                loopEnabled={loopEnabled}
+                onLoopChange={handleLoopToggle}
+                loopLabel="循環播放"
+                playLabel={PLAY_LABEL}
+                pauseLabel={PAUSE_LABEL}
+                volumeLabel={VOLUME_LABEL}
+                noSelectionLabel={TEXT.noSelection}
+                playerContainerRef={playerContainerRef}
+                thumbnail={selectedItem?.thumbnail}
+              />
+              <AnswerPanel
+                title={TEXT.answer}
+                value={answerText}
+                placeholder={TEXT.answerPlaceholder}
+                disabled={!selectedItem}
+                hint="用於遊戲作答的答案"
+                primaryActionLabel="套用標題"
+                onPrimaryAction={() => {
+                  if (!selectedItem?.title) return;
+                  setAnswerText(selectedItem.title);
+                  updateSelectedItem({
+                    answerText: selectedItem.title,
+                  });
+                }}
+                secondaryActionLabel="清空"
+                onSecondaryAction={() => {
+                  setAnswerText("");
+                  updateSelectedItem({ answerText: "" });
+                }}
+                maxLength={ANSWER_MAX_LENGTH}
+                onChange={(value) => {
+                  setAnswerText(value);
+                  updateSelectedItem({ answerText: value });
+                }}
+              />
+            </div>
+            <ClipEditorPanel
+              title={TEXT.editTime}
+              startLabel={TEXT.start}
+              endLabel={TEXT.end}
+              startTimeLabel={START_TIME_LABEL}
+              endTimeLabel={END_TIME_LABEL}
+              startSec={startSec}
+              endSec={endSec}
+              maxSec={maxSec}
+              onRangeChange={handleRangeChange}
+              onRangeCommit={handleRangeCommit}
+              onStartThumbPress={handleStartThumbPress}
+              onEndThumbPress={handleEndThumbPress}
+              formatSeconds={formatSeconds}
+              startTimeInput={startTimeInput}
+              endTimeInput={endTimeInput}
+              onStartInputChange={(value) => setStartTimeInput(value)}
+              onEndInputChange={(value) => setEndTimeInput(value)}
+              onStartBlur={() => {
+                const parsed = parseTimeInput(startTimeInput);
+                if (parsed === null) {
+                  setStartTimeInput(formatSeconds(startSec));
+                  return;
+                }
+                if (parsed === startSec) {
+                  setStartTimeInput(formatSeconds(startSec));
+                  return;
+                }
+                handleStartChange(parsed);
+              }}
+              onEndBlur={() => {
+                const parsed = parseTimeInput(endTimeInput);
+                if (parsed === null) {
+                  setEndTimeInput(formatSeconds(endSec));
+                  return;
+                }
+                if (parsed === endSec) {
+                  setEndTimeInput(formatSeconds(endSec));
+                  return;
+                }
+                handleEndChange(parsed);
+              }}
+              onStartKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              onEndKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+          </div>
+        </div>
       </div>
       {autoSaveNotice && (
         <div

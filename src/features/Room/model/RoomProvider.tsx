@@ -29,7 +29,6 @@ import {
 import { clampQuestionCount, getQuestionMax, normalizePlaylistItems } from "./roomUtils";
 import { ensureFreshAuthToken } from "../../../shared/auth/token";
 import {
-  clearHasRefresh,
   clearRoomPassword,
   clearStoredRoomId,
   clearStoredUsername,
@@ -115,7 +114,6 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const clearAuth = useCallback(() => {
     setUsername(null);
     clearStoredUsername();
-    clearHasRefresh();
     setUsernameInput("");
   }, []);
 

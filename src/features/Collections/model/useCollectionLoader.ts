@@ -26,7 +26,6 @@ type UseCollectionLoaderParams = {
   setPlaylistItems: (items: EditableItem[]) => void;
   setItemsLoading: (value: boolean) => void;
   setItemsError: (value: string | null) => void;
-  setSelectedIndex: (value: number) => void;
   setHasUnsavedChanges: (value: boolean) => void;
   setSaveStatus: (value: "idle" | "saving" | "saved" | "error") => void;
   setSaveError: (value: string | null) => void;
@@ -51,7 +50,6 @@ export const useCollectionLoader = ({
   setPlaylistItems,
   setItemsLoading,
   setItemsError,
-  setSelectedIndex,
   setHasUnsavedChanges,
   setSaveStatus,
   setSaveError,
@@ -179,7 +177,6 @@ export const useCollectionLoader = ({
       if (!active) return;
       setPlaylistItems(enriched);
       setItemsError(null);
-      setSelectedIndex(0);
       setHasUnsavedChanges(false);
       dirtyCounterRef.current = 0;
       setSaveStatus("idle");
@@ -219,7 +216,6 @@ export const useCollectionLoader = ({
     setItemsLoading,
     setItemsError,
     setPlaylistItems,
-    setSelectedIndex,
     setHasUnsavedChanges,
     setSaveStatus,
     setSaveError,

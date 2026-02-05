@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { Bolt, Pause, PlayArrow, Repeat, VolumeUp } from "@mui/icons-material";
 
 type PlayerPanelProps = {
   selectedVideoId: string | null;
@@ -60,43 +61,52 @@ const PlayerPanel = ({
   loopLabel,
   playLabel,
   pauseLabel,
-  volumeLabel,
   noSelectionLabel,
   playerContainerRef,
   thumbnail,
 }: PlayerPanelProps) => {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2">
-      <div className="relative aspect-video w-full max-w-xl mx-auto overflow-hidden rounded-lg bg-slate-900">
+    <div className="p-2.5">
+      <div className="relative w-full overflow-hidden rounded-xl bg-slate-900 aspect-16/6">
         {selectedVideoId ? (
           <>
             <div ref={playerContainerRef} className="h-full w-full" />
             <div className="absolute inset-0 z-10" aria-hidden="true" />
           </>
         ) : thumbnail ? (
-          <img src={thumbnail} alt={selectedTitle} className="h-full w-full object-cover" />
+          <img
+            src={thumbnail}
+            alt={selectedTitle}
+            className="h-full w-full object-cover"
+          />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-slate-500">
             {noSelectionLabel}
           </div>
         )}
       </div>
-      <div className="mt-1 text-sm text-slate-100">{selectedTitle}</div>
-      <div className="text-xs text-slate-400">
-        {selectedUploader}
-        {selectedDuration ? ` · ${selectedDuration}` : ""}
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-slate-100 line-clamp-1">
+            {selectedTitle}
+          </div>
+          <div className="text-[11px] text-slate-400">
+            {selectedUploader}
+            {selectedDuration ? ` · ${selectedDuration}` : ""}
+          </div>
+        </div>
+        <div className="shrink-0 text-[9px] uppercase tracking-[0.3em] text-slate-500">
+          {selectedClipDurationLabel} {selectedClipDurationSec}
+        </div>
       </div>
-      <div className="text-xs text-slate-400">
-        {selectedClipDurationLabel}: {selectedClipDurationSec}
-      </div>
-      <div className="mt-1.5">
-        <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="mt-2">
+        <div className="flex items-center justify-between text-[11px] text-slate-500">
           <span>{clipCurrentSec}</span>
           <span>{clipDurationSec}</span>
         </div>
-        <div className="mt-0.5 h-1 w-full rounded-full bg-slate-800">
+        <div className="mt-1 h-1.5 w-full rounded-full bg-slate-800/80">
           <div
-            className="h-full rounded-full bg-sky-400"
+            className="h-full rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-300"
             style={{ width: `${clipProgressPercent}%` }}
           />
         </div>
@@ -110,44 +120,63 @@ const PlayerPanel = ({
           className="mt-1.5 w-full accent-sky-400"
         />
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={onTogglePlayback}
           disabled={!isPlayerReady}
-          className="rounded-md border border-slate-700 px-3 py-1 text-slate-200 hover:border-slate-400 disabled:opacity-50"
+          aria-label={isPlaying ? pauseLabel : playLabel}
+          className={`flex h-7 w-7 items-center justify-center rounded-full border text-slate-100 transition ${
+            isPlaying
+              ? "border-sky-400/70 bg-sky-400/15"
+              : "border-slate-700 bg-slate-900/80"
+          } hover:border-sky-300 disabled:opacity-50`}
         >
-          {isPlaying ? pauseLabel : playLabel}
+          {isPlaying ? (
+            <Pause fontSize="small" />
+          ) : (
+            <PlayArrow fontSize="small" />
+          )}
         </button>
-        <label className="flex items-center gap-2 text-xs text-slate-300">
-          <input
-            type="checkbox"
-            checked={autoPlayOnSwitch}
-            onChange={(e) => onAutoPlayChange(e.target.checked)}
-            className="h-3.5 w-3.5 accent-sky-400"
-          />
-          <span>{autoPlayLabel}</span>
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-300">
-          <input
-            type="checkbox"
-            checked={loopEnabled}
-            onChange={(e) => onLoopChange(e.target.checked)}
-            className="h-3.5 w-3.5 accent-sky-400"
-          />
-          <span>{loopLabel}</span>
-        </label>
-        <div className="flex items-center gap-2">
-          <span>{volumeLabel}</span>
+        <button
+          type="button"
+          onClick={() => onAutoPlayChange(!autoPlayOnSwitch)}
+          aria-pressed={autoPlayOnSwitch}
+          title={autoPlayLabel}
+          className={`flex h-7 w-7 items-center justify-center rounded-full border text-slate-100 transition ${
+            autoPlayOnSwitch
+              ? "border-emerald-400/70 bg-emerald-400/15"
+              : "border-slate-700 bg-slate-900/80"
+          } hover:border-emerald-300`}
+        >
+          <Bolt fontSize="small" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onLoopChange(!loopEnabled)}
+          aria-pressed={loopEnabled}
+          title={loopLabel}
+          className={`flex h-7 w-7 items-center justify-center rounded-full border text-slate-100 transition ${
+            loopEnabled
+              ? "border-amber-400/70 bg-amber-400/15"
+              : "border-slate-700 bg-slate-900/80"
+          } hover:border-amber-300`}
+        >
+          <Repeat fontSize="small" />
+        </button>
+        <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">
+          <VolumeUp fontSize="small" />
           <input
             type="range"
             min={0}
             max={100}
             value={volume}
             onChange={(e) => onVolumeChange(Number(e.target.value))}
-            className="w-28 accent-sky-400"
+            className="w-20 accent-sky-400"
           />
-          <span className="w-6 text-right">{volume}</span>
+          <span className="w-6 text-right text-[10px] text-slate-400">
+            {volume}
+          </span>
         </div>
       </div>
     </div>

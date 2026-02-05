@@ -27,6 +27,7 @@ type UseCollectionEditorParams = {
   navigateToEdit: (id: string) => void;
   markDirty: () => void;
   refreshAuthToken: () => Promise<string | null>;
+  onSaved?: () => void;
 };
 
 export const useCollectionEditor = ({
@@ -51,6 +52,7 @@ export const useCollectionEditor = ({
   saveInFlightRef,
   navigateToEdit,
   refreshAuthToken,
+  onSaved,
 }: UseCollectionEditorParams) => {
   const isAuthError = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -256,6 +258,7 @@ export const useCollectionEditor = ({
         if (noNewChanges) {
           setHasUnsavedChanges(false);
           dirtyCounterRef.current = 0;
+          onSaved?.();
           if (mode === "auto") {
             setSaveStatus("idle");
             showAutoSaveNotice("success", "自動保存成功");
@@ -291,6 +294,7 @@ export const useCollectionEditor = ({
       showAutoSaveNotice,
       syncItemsToDb,
       saveInFlightRef,
+      onSaved,
     ],
   );
 

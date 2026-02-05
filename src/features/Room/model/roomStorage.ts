@@ -40,14 +40,6 @@ export const getOrCreateClientId = () => {
   return generated;
 };
 
-export const setHasRefresh = () =>
-  localStorage.setItem(STORAGE_KEYS.hasRefresh, "1");
-
-export const clearHasRefresh = () =>
-  localStorage.removeItem(STORAGE_KEYS.hasRefresh);
-
-export const hasRefreshFlag = () =>
-  localStorage.getItem(STORAGE_KEYS.hasRefresh) === "1";
 
 export const getRoomPassword = (roomId: string) =>
   localStorage.getItem(roomPasswordKey(roomId));

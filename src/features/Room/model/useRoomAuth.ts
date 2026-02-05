@@ -7,12 +7,7 @@ import {
   apiRefreshAuthToken,
   apiUpsertWorkerUser,
 } from "./roomApi";
-import {
-  hasRefreshFlag,
-  isProfileConfirmed,
-  setHasRefresh,
-  setProfileConfirmed,
-} from "./roomStorage";
+import { isProfileConfirmed, setProfileConfirmed } from "./roomStorage";
 import { clearTokenExpiry, persistTokenExpiry } from "../../../shared/auth/token";
 
 type UseRoomAuthOptions = {
@@ -50,7 +45,7 @@ export const useRoomAuth = ({
 }: UseRoomAuthOptions): UseRoomAuthResult => {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [authLoading, setAuthLoading] = useState(hasRefreshFlag());
+  const [authLoading, setAuthLoading] = useState(true);
   const [needsNicknameConfirm, setNeedsNicknameConfirm] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
@@ -59,6 +54,8 @@ export const useRoomAuth = ({
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const lastHandledAuthCodeRef = useRef<string | null>(null);
   const initialRefreshRef = useRef(false);
+  const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+  const lastRefreshFailAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     localStorage.removeItem("mq_authToken");
@@ -79,7 +76,6 @@ export const useRoomAuth = ({
     (token: string, user: AuthUser) => {
       setAuthToken(token);
       setAuthUser(user);
-      setHasRefresh();
       persistTokenExpiry(token);
       const confirmed = isProfileConfirmed(user.id);
       if (!confirmed) {
@@ -94,18 +90,34 @@ export const useRoomAuth = ({
 
   const refreshAuthToken = useCallback(async () => {
     if (!apiUrl) return null;
-    try {
-      const { ok, payload } = await apiRefreshAuthToken(apiUrl);
-      if (!ok || !payload?.token || !payload.user) {
-        clearAuth();
-        return null;
-      }
-      persistAuth(payload.token, payload.user);
-      return payload.token;
-    } catch {
-      clearAuth();
-      return null;
+    if (lastRefreshFailAtRef.current) {
+      const elapsed = Date.now() - lastRefreshFailAtRef.current;
+      if (elapsed < 30_000) return null;
     }
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+    const run = async () => {
+      try {
+        const { ok, payload } = await apiRefreshAuthToken(apiUrl);
+        if (!ok || !payload?.token || !payload.user) {
+          clearAuth();
+          lastRefreshFailAtRef.current = Date.now();
+          return null;
+        }
+        lastRefreshFailAtRef.current = null;
+        persistAuth(payload.token, payload.user);
+        return payload.token;
+      } catch {
+        clearAuth();
+        lastRefreshFailAtRef.current = Date.now();
+        return null;
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    };
+    refreshInFlightRef.current = run();
+    return refreshInFlightRef.current;
   }, [apiUrl, clearAuth, persistAuth]);
 
   const confirmNickname = useCallback(async () => {
@@ -274,7 +286,7 @@ export const useRoomAuth = ({
   }, [apiUrl, clearAuth, setStatusText]);
 
   useEffect(() => {
-    if (!apiUrl || initialRefreshRef.current || !hasRefreshFlag()) return;
+    if (!apiUrl || initialRefreshRef.current) return;
     initialRefreshRef.current = true;
     setAuthLoading(true);
     refreshAuthToken().finally(() => setAuthLoading(false));

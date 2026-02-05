@@ -152,7 +152,7 @@ const EditHeader = ({
             variant="contained"
             size="small"
             onClick={onSave}
-            disabled={isSaving || isReadOnly}
+            disabled={isSaving || isReadOnly || !hasUnsavedChanges}
             title={saveError ? `${saveErrorLabel}: ${saveError}` : undefined}
           >
             {buttonLabel}

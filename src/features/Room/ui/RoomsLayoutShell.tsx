@@ -58,7 +58,7 @@ const RoomsLayoutShell: React.FC = () => {
 
         <Outlet />
 
-        <footer className="mt-4 flex items-center justify-center gap-4 text-xs text-[var(--mc-text-muted)]">
+        <footer className="flex m-0 items-center justify-center gap-4 text-xs text-[var(--mc-text-muted)]">
           <Link to="/privacy" className="hover:text-[var(--mc-text)]">
             隱私權政策
           </Link>

@@ -9,7 +9,6 @@ import {
   Typography,
 } from "@mui/material";
 import { useRoom } from "../../Room/model/useRoom";
-import { hasRefreshFlag } from "../../Room/model/roomStorage";
 import { ensureFreshAuthToken } from "../../../shared/auth/token";
 
 const WORKER_API_URL = import.meta.env.VITE_WORKER_API_URL;
@@ -75,15 +74,11 @@ const CollectionsPage = () => {
   const [collections, setCollections] = useState<DbCollection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authResolved, setAuthResolved] = useState(() => !hasRefreshFlag());
+  const [authResolved, setAuthResolved] = useState(() => !authLoading);
   const ownerId = authUser?.id ?? null;
   const showSkeleton = loading && collections.length === 0;
 
   useEffect(() => {
-    if (!hasRefreshFlag()) {
-      setAuthResolved(true);
-      return;
-    }
     if (!authLoading) {
       setAuthResolved(true);
     }

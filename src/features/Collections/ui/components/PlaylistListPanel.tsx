@@ -298,7 +298,7 @@ const PlaylistListPanel = ({
   };
 
   return (
-    <div className="space-y-2 lg:order-2 lg:sticky lg:top-24 self-start">
+    <div className="space-y-2 lg:sticky self-start">
       <div className="flex items-center justify-between text-[11px] text-[var(--mc-text-muted)]">
         <span className="uppercase tracking-[0.22em]">Playlist</span>
         <span>{items.length} items</span>
@@ -406,7 +406,7 @@ const PlaylistListPanel = ({
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           <div
             ref={listRef}
-            className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto pr-1"
+            className="space-y-2 max-h-[calc(100svh-420px)] lg:max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
           >
             {safeItems.map((item, idx) => {
               const isActive = idx === selectedIndex;
