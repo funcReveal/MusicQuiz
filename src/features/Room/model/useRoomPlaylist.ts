@@ -40,7 +40,11 @@ export type UseRoomPlaylistResult = {
   questionMaxLimit: number;
   questionStep: number;
   updateQuestionCount: (value: number) => number;
-  handleFetchPlaylist: () => Promise<void>;
+  handleFetchPlaylist: (options?: {
+    url?: string;
+    force?: boolean;
+    lock?: boolean;
+  }) => Promise<void>;
   handleResetPlaylist: () => void;
   youtubePlaylists: YoutubePlaylist[];
   youtubePlaylistsLoading: boolean;
@@ -257,15 +261,18 @@ export const useRoomPlaylist = ({
     [apiUrl, authToken, refreshAuthToken, setStatusText, youtubePlaylists],
   );
 
-  const handleFetchPlaylist = useCallback(async () => {
+  const handleFetchPlaylist = useCallback(
+    async (options?: { url?: string; force?: boolean; lock?: boolean }) => {
+      const shouldLock = options?.lock ?? true;
+      const targetUrl = options?.url ?? playlistUrl;
     setPlaylistError(null);
 
-    if (playlistLocked && lastFetchedPlaylistId) {
+    if (!options?.force && playlistLocked && lastFetchedPlaylistId) {
       setPlaylistError("播放清單已鎖定，如需重選請按「重選播放清單」");
       return;
     }
 
-    const playlistId = extractPlaylistId(playlistUrl);
+    const playlistId = extractPlaylistId(targetUrl);
     if (!playlistId) {
       setPlaylistError("請貼上有效的播放清單網址");
       return;
@@ -281,7 +288,7 @@ export const useRoomPlaylist = ({
     try {
       const { ok, payload } = await apiPreviewPlaylist(
         apiUrl,
-        playlistUrl,
+        targetUrl,
         playlistId,
       );
       if (!ok || !payload) {
@@ -302,7 +309,7 @@ export const useRoomPlaylist = ({
       const normalizedItems = normalizePlaylistItems(data.items);
       setPlaylistItems(normalizedItems);
       setPlaylistStage("preview");
-      setPlaylistLocked(true);
+      setPlaylistLocked(shouldLock);
       setLastFetchedPlaylistId(data.playlistId ?? playlistId);
       setLastFetchedPlaylistTitle(data.title ?? null);
 
@@ -331,13 +338,15 @@ export const useRoomPlaylist = ({
     } finally {
       setPlaylistLoading(false);
     }
-  }, [
-    apiUrl,
-    lastFetchedPlaylistId,
-    playlistLocked,
-    playlistUrl,
-    setStatusText,
-  ]);
+    },
+    [
+      apiUrl,
+      lastFetchedPlaylistId,
+      playlistLocked,
+      playlistUrl,
+      setStatusText,
+    ],
+  );
 
   const handleResetPlaylist = useCallback(() => {
     setPlaylistUrl("");

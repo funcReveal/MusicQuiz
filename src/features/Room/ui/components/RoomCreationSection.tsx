@@ -19,6 +19,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { List as VirtualList, type RowComponentProps } from "react-window";
 import type { PlaylistItem, RoomSummary } from "../../model/types";
+import QuestionCountControls from "./QuestionCountControls";
 
 interface RoomCreationSectionProps {
   roomName: string;
@@ -49,6 +50,7 @@ interface RoomCreationSectionProps {
     id: string;
     title: string;
     description?: string | null;
+    visibility?: "private" | "public";
   }>;
   collectionsLoading?: boolean;
   collectionsError?: string | null;
@@ -65,7 +67,7 @@ interface RoomCreationSectionProps {
   onResetPlaylist: () => void;
   onFetchYoutubePlaylists?: () => void;
   onImportYoutubePlaylist?: (playlistId: string) => void;
-  onFetchCollections?: () => void;
+  onFetchCollections?: (scope?: "owner" | "public") => void;
   onSelectCollection?: (collectionId: string | null) => void;
   onLoadCollectionItems?: (collectionId: string) => void;
   onCreateRoom: () => void;
@@ -117,6 +119,16 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   const [playlistSource, setPlaylistSource] = React.useState<
     "link" | "mine" | "collection"
   >("link");
+  const [collectionScope, setCollectionScope] = React.useState<
+    "public" | "owner"
+  >("public");
+  const lastRequestedCollectionScopeRef = React.useRef<
+    "public" | "owner" | null
+  >(null);
+  const [lastFetchedCollectionScope, setLastFetchedCollectionScope] =
+    React.useState<"public" | "owner" | null>(null);
+  const lastRequestedYoutubeRef = React.useRef(false);
+  const [hasFetchedYoutube, setHasFetchedYoutube] = React.useState(false);
   const needsReauth = Boolean(
     youtubePlaylistsError && youtubePlaylistsError.includes("重新授權"),
   );
@@ -131,6 +143,76 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
   const showPlaylistInput = playlistStage === "input";
   const privacyLabel = roomPassword.trim() ? "需密碼" : "公開";
   const playlistSourceLoading = playlistLoading || collectionItemsLoading;
+  const isCollectionsEmptyNotice =
+    collectionsError === "尚未建立收藏庫" ||
+    collectionsError === "尚未建立公開收藏庫";
+
+  React.useEffect(() => {
+    if (collectionsLoading) return;
+    const requested = lastRequestedCollectionScopeRef.current;
+    if (!requested) return;
+    if (!collectionsError || isCollectionsEmptyNotice) {
+      setLastFetchedCollectionScope(requested);
+    }
+  }, [collectionsError, collectionsLoading, isCollectionsEmptyNotice]);
+
+  const shouldFetchCollections = React.useCallback(
+    (scope: "public" | "owner") => {
+      if (collectionsLoading) return false;
+      if (collectionsError && !isCollectionsEmptyNotice) return true;
+      if (lastFetchedCollectionScope !== scope) return true;
+      return false;
+    },
+    [
+      collectionsError,
+      collectionsLoading,
+      isCollectionsEmptyNotice,
+      lastFetchedCollectionScope,
+    ],
+  );
+
+  const requestCollections = React.useCallback(
+    (scope: "public" | "owner") => {
+      if (!onFetchCollections) return;
+      if (!shouldFetchCollections(scope)) return;
+      lastRequestedCollectionScopeRef.current = scope;
+      onFetchCollections(scope);
+    },
+    [onFetchCollections, shouldFetchCollections],
+  );
+
+  React.useEffect(() => {
+    if (youtubePlaylistsLoading) return;
+    if (!lastRequestedYoutubeRef.current) return;
+    if (!youtubePlaylistsError) {
+      setHasFetchedYoutube(true);
+    }
+  }, [youtubePlaylistsError, youtubePlaylistsLoading]);
+
+  const shouldFetchYoutube = React.useCallback(() => {
+    if (youtubePlaylistsLoading) return false;
+    if (youtubePlaylistsError) return true;
+    if (!hasFetchedYoutube) return true;
+    return false;
+  }, [hasFetchedYoutube, youtubePlaylistsError, youtubePlaylistsLoading]);
+
+  const requestYoutubePlaylists = React.useCallback(() => {
+    if (!onFetchYoutubePlaylists) return;
+    if (!shouldFetchYoutube()) return;
+    lastRequestedYoutubeRef.current = true;
+    onFetchYoutubePlaylists();
+  }, [onFetchYoutubePlaylists, shouldFetchYoutube]);
+
+  React.useEffect(() => {
+    if (playlistSource !== "mine") return;
+    if (!isGoogleAuthed) return;
+    requestYoutubePlaylists();
+  }, [isGoogleAuthed, playlistSource, requestYoutubePlaylists]);
+
+  React.useEffect(() => {
+    if (playlistSource !== "collection") return;
+    requestCollections(collectionScope);
+  }, [collectionScope, playlistSource, requestCollections]);
 
   const rowCount = playlistItems.length;
   const canAdjustQuestions =
@@ -200,14 +282,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
         </div>
       </div>
     );
-  };
-
-  const adjustQuestionCount = (delta: number) => {
-    const next = Math.min(
-      questionMax,
-      Math.max(questionMin, questionCount + delta),
-    );
-    onQuestionCountChange(next);
   };
 
   return (
@@ -338,105 +412,16 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               </Stack>
             </AccordionSummary>
             <AccordionDetails>
-              <Stack
-                direction={"row"}
-                spacing={1.5}
-                alignItems={{ sm: "center" }}
-                sx={{
-                  p: 1,
-                  minWidth: "fit-content",
+              <QuestionCountControls
+                value={questionCount}
+                min={questionMin}
+                max={questionMax}
+                step={questionStep}
+                disabled={!canAdjustQuestions}
+                onChange={(nextValue) => {
+                  onQuestionCountChange(nextValue);
                 }}
-              >
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => onQuestionCountChange(questionMin)}
-                    disabled={
-                      !canAdjustQuestions || questionCount === questionMin
-                    }
-                  >
-                    最小
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(-questionStep)}
-                    disabled={
-                      !canAdjustQuestions || questionCount <= questionMin
-                    }
-                  >
-                    -{questionStep}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(-1)}
-                    disabled={
-                      !canAdjustQuestions || questionCount <= questionMin
-                    }
-                  >
-                    -1
-                  </Button>
-                </Stack>
-
-                <Stack
-                  spacing={0.25}
-                  alignItems={"center"}
-                  sx={{ minWidth: 120 }}
-                >
-                  <Typography variant="body2" className="room-create-muted">
-                    題數
-                  </Typography>
-                  <Typography variant="h4" className="room-create-figure">
-                    {questionCount}
-                  </Typography>
-                  <Typography variant="caption" className="room-create-muted">
-                    {questionMin}–{questionMax}
-                  </Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(1)}
-                    disabled={
-                      !canAdjustQuestions || questionCount >= questionMax
-                    }
-                  >
-                    +1
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(questionStep)}
-                    disabled={
-                      !canAdjustQuestions || questionCount >= questionMax
-                    }
-                  >
-                    +{questionStep}
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => onQuestionCountChange(questionMax)}
-                    disabled={
-                      !canAdjustQuestions || questionCount === questionMax
-                    }
-                  >
-                    最大
-                  </Button>
-                </Stack>
-              </Stack>
+              />
             </AccordionDetails>
           </Accordion>
 
@@ -490,13 +475,12 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                     setPlaylistSource("collection");
                     setSelectedYoutubeId("");
                   }}
-                  disabled={!isGoogleAuthed}
                 >
                   {"收藏庫"}
                 </Button>
                 {!isGoogleAuthed && (
                   <Typography variant="caption" className="room-create-muted">
-                    {"登入後才能使用"}
+                    {"未登入僅可使用公開收藏庫"}
                   </Typography>
                 )}
               </Stack>
@@ -564,16 +548,11 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                   )}
                   {isGoogleAuthed && (
                     <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                      <Button
-                        variant="outlined"
-                        className="room-create-accent-button"
-                        onClick={onFetchYoutubePlaylists}
-                        disabled={!username || youtubePlaylistsLoading}
-                      >
-                        {youtubePlaylistsLoading
-                          ? "載入中..."
-                          : "取得我的播放清單"}
-                      </Button>
+                      {youtubePlaylistsLoading && (
+                        <Typography variant="caption" className="room-create-muted">
+                          載入中...
+                        </Typography>
+                      )}
                       {youtubePlaylists.length > 0 && (
                         <>
                           <select
@@ -604,6 +583,16 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                           </Button>
                         </>
                       )}
+                      {!youtubePlaylistsLoading &&
+                        youtubePlaylists.length === 0 &&
+                        !youtubePlaylistsError && (
+                          <Typography
+                            variant="caption"
+                            className="room-create-muted"
+                          >
+                            尚未載入播放清單
+                          </Typography>
+                        )}
                     </Stack>
                   )}
                   {youtubePlaylistsError && (
@@ -641,7 +630,38 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               )}
               {playlistSource === "collection" && (
                 <Stack spacing={1.5}>
-                  {!isGoogleAuthed && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button
+                      variant={
+                        collectionScope === "public" ? "contained" : "outlined"
+                      }
+                      onClick={() => {
+                        setCollectionScope("public");
+                        onSelectCollection?.(null);
+                      }}
+                    >
+                      {"公開收藏庫"}
+                    </Button>
+                    <Button
+                      variant={
+                        collectionScope === "owner" ? "contained" : "outlined"
+                      }
+                      onClick={() => {
+                        setCollectionScope("owner");
+                        onSelectCollection?.(null);
+                      }}
+                      disabled={!isGoogleAuthed}
+                    >
+                      {"我的收藏庫"}
+                    </Button>
+                    {!isGoogleAuthed && (
+                      <Typography variant="caption" className="room-create-muted">
+                    {"登入後可使用私人收藏庫"}
+                      </Typography>
+                    )}
+                  </Stack>
+
+                  {collectionScope === "owner" && !isGoogleAuthed && (
                     <Button
                       variant="outlined"
                       onClick={onGoogleLogin}
@@ -650,52 +670,59 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
                       {"使用 Google 登入"}
                     </Button>
                   )}
-                  {isGoogleAuthed && (
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                      <Button
-                        variant="outlined"
-                        onClick={onFetchCollections}
-                        disabled={!onFetchCollections || collectionsLoading}
-                      >
-                        {collectionsLoading ? "載入中..." : "取得收藏庫"}
-                      </Button>
-                      {collections.length > 0 && (
-                        <>
-                          <select
-                            value={selectedCollectionId ?? ""}
-                            onChange={(e) =>
-                              onSelectCollection?.(
-                                e.target.value ? e.target.value : null,
-                              )
-                            }
-                            className="flex-1 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)] px-3 py-2 text-sm text-[var(--mc-text)]"
-                          >
-                            <option value="">{"請選擇收藏庫"}</option>
-                            {collections.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.title}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            variant="contained"
-                            color="secondary"
-                            disabled={
-                              !selectedCollectionId || collectionItemsLoading
-                            }
-                            onClick={() =>
-                              selectedCollectionId &&
-                              onLoadCollectionItems?.(selectedCollectionId)
-                            }
-                          >
-                            {collectionItemsLoading
-                              ? "載入中..."
-                              : "載入收藏庫"}
-                          </Button>
-                        </>
+
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                    {collectionsLoading && (
+                      <Typography variant="caption" className="room-create-muted">
+                        載入中...
+                      </Typography>
+                    )}
+                    {collections.length > 0 && (
+                      <>
+                        <select
+                          value={selectedCollectionId ?? ""}
+                          onChange={(e) =>
+                            onSelectCollection?.(
+                              e.target.value ? e.target.value : null,
+                            )
+                          }
+                          className="flex-1 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)] px-3 py-2 text-sm text-[var(--mc-text)]"
+                        >
+                          <option value="">{"請選擇收藏庫"}</option>
+                          {collections.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {`${item.title} · ${
+                                item.visibility === "public" ? "公開" : "私人"
+                              }`}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="contained"
+                          color="secondary"
+                          disabled={!selectedCollectionId || collectionItemsLoading}
+                          onClick={() =>
+                            selectedCollectionId &&
+                            onLoadCollectionItems?.(selectedCollectionId)
+                          }
+                        >
+                          {collectionItemsLoading
+                            ? "載入中..."
+                            : "載入收藏庫"}
+                        </Button>
+                      </>
+                    )}
+                    {!collectionsLoading &&
+                      collections.length === 0 &&
+                      !collectionsError && (
+                        <Typography
+                          variant="caption"
+                          className="room-create-muted"
+                        >
+                          尚未載入收藏庫
+                        </Typography>
                       )}
-                    </Stack>
-                  )}
+                  </Stack>
                   {collectionsError && (
                     <Alert severity="error" variant="outlined">
                       {collectionsError}

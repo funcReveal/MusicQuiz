@@ -19,6 +19,24 @@ const RoomLobbyPage: React.FC = () => {
     playlistHasMore,
     playlistLoadingMore,
     playlistProgress,
+    playlistSuggestions,
+    playlistUrl,
+    playlistItems,
+    playlistError,
+    playlistLoading,
+    setPlaylistUrl,
+    collections,
+    collectionsLoading,
+    collectionsError,
+    collectionItemsLoading,
+    collectionItemsError,
+    selectedCollectionId,
+    authUser,
+    youtubePlaylists,
+    youtubePlaylistsLoading,
+    youtubePlaylistsError,
+    fetchYoutubePlaylists,
+    importYoutubePlaylist,
     gameState,
     isGameView,
     setIsGameView,
@@ -34,6 +52,15 @@ const RoomLobbyPage: React.FC = () => {
     loadMorePlaylist,
     handleStartGame,
     handleSubmitChoice,
+    handleUpdateRoomSettings,
+    handleKickPlayer,
+    handleTransferHost,
+    handleSuggestPlaylist,
+    handleChangePlaylist,
+    handleFetchPlaylistByUrl,
+    fetchCollections,
+    selectCollection,
+    loadCollectionItems,
   } = useRoom();
 
   useEffect(() => {
@@ -64,7 +91,9 @@ const RoomLobbyPage: React.FC = () => {
           room={currentRoom}
           gameState={gameState}
           playlist={gamePlaylist.length > 0 ? gamePlaylist : playlistViewItems}
-          onBack={() => setIsGameView(false)}
+          onExitGame={() =>
+            handleLeaveRoom(() => navigate("/rooms", { replace: true }))
+          }
           onSubmitChoice={handleSubmitChoice}
           participants={participants}
           meClientId={clientId}
@@ -93,6 +122,21 @@ const RoomLobbyPage: React.FC = () => {
           playlistHasMore={playlistHasMore}
           playlistLoadingMore={playlistLoadingMore}
           playlistProgress={playlistProgress}
+          playlistSuggestions={playlistSuggestions}
+          playlistUrl={playlistUrl}
+          playlistItemsForChange={playlistItems}
+          playlistError={playlistError}
+          playlistLoading={playlistLoading}
+          collections={collections}
+          collectionsLoading={collectionsLoading}
+          collectionsError={collectionsError}
+          collectionItemsLoading={collectionItemsLoading}
+          collectionItemsError={collectionItemsError}
+          isGoogleAuthed={Boolean(authUser)}
+          selectedCollectionId={selectedCollectionId}
+          youtubePlaylists={youtubePlaylists}
+          youtubePlaylistsLoading={youtubePlaylistsLoading}
+          youtubePlaylistsError={youtubePlaylistsError}
           isHost={currentRoom.hostClientId === clientId}
           gameState={gameState}
           canStartGame={playlistProgress.ready}
@@ -103,7 +147,19 @@ const RoomLobbyPage: React.FC = () => {
           onSend={handleSendMessage}
           onLoadMorePlaylist={loadMorePlaylist}
           onStartGame={handleStartGame}
+          onUpdateRoomSettings={handleUpdateRoomSettings}
           onOpenGame={() => setIsGameView(true)}
+          onKickPlayer={handleKickPlayer}
+          onTransferHost={handleTransferHost}
+          onSuggestPlaylist={handleSuggestPlaylist}
+          onChangePlaylist={handleChangePlaylist}
+          onPlaylistUrlChange={setPlaylistUrl}
+          onFetchPlaylistByUrl={handleFetchPlaylistByUrl}
+          onFetchCollections={fetchCollections}
+          onSelectCollection={selectCollection}
+          onLoadCollectionItems={loadCollectionItems}
+          onFetchYoutubePlaylists={fetchYoutubePlaylists}
+          onImportYoutubePlaylist={importYoutubePlaylist}
           onInvite={async () => {
             const url = new URL(window.location.href);
             url.pathname = `/invited/${currentRoom.id}`;

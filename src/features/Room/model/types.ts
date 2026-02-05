@@ -46,6 +46,14 @@ export interface GameState {
   lockedOrder?: string[];
 }
 
+export interface PlaylistSuggestion {
+  clientId: string;
+  username: string;
+  type: "collection" | "playlist";
+  value: string;
+  suggestedAt: number;
+}
+
 export interface RoomParticipant {
   clientId: string;
   username: string;
@@ -76,6 +84,8 @@ export interface RoomSummary {
   gameSettings?: {
     questionCount: number;
   };
+  visibility?: "public" | "private";
+  maxPlayers?: number | null;
 }
 
 export interface RoomState {
@@ -153,6 +163,44 @@ export interface ClientToServerEvents {
     payload: { roomId: string; choiceIndex: number },
     callback?: (ack: Ack<null>) => void
   ) => void;
+  updateRoomSettings: (
+    payload: {
+      roomId: string;
+      name?: string;
+      visibility?: "public" | "private";
+      password?: string | null;
+      questionCount?: number;
+      maxPlayers?: number | null;
+    },
+    callback?: (ack: Ack<{ room: RoomSummary }>) => void
+  ) => void;
+  kickPlayer: (
+    payload: { roomId: string; targetClientId: string; durationMs?: number | null },
+    callback?: (ack: Ack<null>) => void
+  ) => void;
+  transferHost: (
+    payload: { roomId: string; targetClientId: string },
+    callback?: (ack: Ack<{ hostClientId: string }>) => void
+  ) => void;
+  suggestPlaylist: (
+    payload: { roomId: string; type: "collection" | "playlist"; value: string },
+    callback?: (ack: Ack<null>) => void
+  ) => void;
+  changePlaylist: (
+    payload: {
+      roomId: string;
+      playlist: {
+        uploadId: string;
+        id?: string;
+        title?: string;
+        totalCount: number;
+        items?: PlaylistItem[];
+        isLast?: boolean;
+        pageSize?: number;
+      };
+    },
+    callback?: (ack: Ack<{ receivedCount: number; totalCount: number; ready: boolean }>) => void
+  ) => void;
 }
 
 // Server -> Client
@@ -175,6 +223,9 @@ export interface ServerToClientEvents {
   messageAdded: (payload: { roomId: string; message: ChatMessage }) => void;
   gameStarted: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
   gameUpdated: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
+  roomUpdated: (payload: { room: RoomSummary }) => void;
+  kicked: (payload: { roomId: string; reason: string; bannedUntil: number | null }) => void;
+  playlistSuggestionsUpdated: (payload: { roomId: string; suggestions: PlaylistSuggestion[] }) => void;
 }
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
