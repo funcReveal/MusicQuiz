@@ -7,6 +7,7 @@ import {
   Badge,
   Box,
   Button,
+  ButtonGroup,
   Card,
   CardContent,
   CardHeader,
@@ -26,6 +27,7 @@ import {
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import { List as VirtualList, type RowComponentProps } from "react-window";
 import type {
   ChatMessage,
@@ -36,6 +38,14 @@ import type {
   RoomState,
 } from "../../model/types";
 import type { YoutubePlaylist } from "../../model/RoomContext";
+import { clampQuestionCount, getQuestionMax } from "../../model/roomUtils";
+import {
+  PLAYER_MAX,
+  PLAYER_MIN,
+  QUESTION_MIN,
+  QUESTION_STEP,
+} from "../../model/roomConstants";
+import QuestionCountControls from "./QuestionCountControls";
 
 const formatTime = (timestamp: number) => {
   const d = new Date(timestamp);
@@ -312,6 +322,13 @@ interface RoomLobbyPanelProps {
   onSend: () => void;
   onLoadMorePlaylist: () => void;
   onStartGame: () => void;
+  onUpdateRoomSettings: (payload: {
+    name?: string;
+    visibility?: "public" | "private";
+    password?: string | null;
+    questionCount?: number;
+    maxPlayers?: number | null;
+  }) => Promise<boolean>;
   onOpenGame?: () => void;
   /** Invite handler that returns Promise<void>; surface errors via throw or status text */
   onInvite: () => Promise<void>;
@@ -362,6 +379,7 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
   onSend,
   onLoadMorePlaylist,
   onStartGame,
+  onUpdateRoomSettings,
   onOpenGame,
   onInvite,
   onKickPlayer,
@@ -403,6 +421,17 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
     title: string;
     detail?: string;
   } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsVisibility, setSettingsVisibility] = useState<
+    "public" | "private"
+  >("public");
+  const [settingsPassword, setSettingsPassword] = useState("");
+  const [settingsPasswordDirty, setSettingsPasswordDirty] = useState(false);
+  const [settingsQuestionCount, setSettingsQuestionCount] =
+    useState(QUESTION_MIN);
+  const [settingsMaxPlayers, setSettingsMaxPlayers] = useState("");
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const maskedRoomPassword = roomPassword
     ? "*".repeat(roomPassword.length)
     : "";
@@ -425,6 +454,11 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
     }
     return `載入成功，共 ${playlistItemsForChange.length} 首`;
   })();
+  const questionMaxLimit = getQuestionMax(
+    currentRoom?.playlist.totalCount ?? 0,
+  );
+  const questionMinLimit = Math.min(QUESTION_MIN, questionMaxLimit);
+  const settingsDisabled = gameState?.status === "playing";
 
   const extractPlaylistId = (url: string) => {
     try {
@@ -534,6 +568,79 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
     setActionTargetId(null);
   };
 
+  const openSettingsModal = () => {
+    if (!currentRoom) return;
+    setSettingsName(currentRoom.name);
+    setSettingsVisibility(currentRoom.visibility ?? "public");
+    setSettingsPassword(roomPassword ?? "");
+    setSettingsPasswordDirty(false);
+    const baseQuestion =
+      currentRoom.gameSettings?.questionCount ?? QUESTION_MIN;
+    setSettingsQuestionCount(
+      clampQuestionCount(baseQuestion, questionMaxLimit),
+    );
+    setSettingsMaxPlayers(
+      currentRoom.maxPlayers && currentRoom.maxPlayers > 0
+        ? String(currentRoom.maxPlayers)
+        : "",
+    );
+    setSettingsError(null);
+    setSettingsOpen(true);
+  };
+
+  const closeSettingsModal = () => {
+    setSettingsOpen(false);
+    setSettingsError(null);
+  };
+
+  const handleSaveSettings = async () => {
+    if (settingsDisabled) return;
+    const trimmedName = settingsName.trim();
+    if (!trimmedName) {
+      setSettingsError("請輸入房間名稱");
+      return;
+    }
+    const parsedMaxPlayers = settingsMaxPlayers.trim()
+      ? Number(settingsMaxPlayers)
+      : null;
+    if (parsedMaxPlayers !== null && !Number.isFinite(parsedMaxPlayers)) {
+      setSettingsError("請輸入有效的人數上限");
+      return;
+    }
+    const normalizedMaxPlayers =
+      parsedMaxPlayers !== null ? Math.floor(parsedMaxPlayers) : null;
+    const effectiveMaxPlayers =
+      normalizedMaxPlayers && normalizedMaxPlayers > 0
+        ? normalizedMaxPlayers
+        : null;
+    if (
+      effectiveMaxPlayers !== null &&
+      (effectiveMaxPlayers < PLAYER_MIN || effectiveMaxPlayers > PLAYER_MAX)
+    ) {
+      setSettingsError(
+        `人數上限需介於 ${PLAYER_MIN} 到 ${PLAYER_MAX}`,
+      );
+      return;
+    }
+
+    const nextMaxPlayers = effectiveMaxPlayers;
+    const nextQuestionCount = clampQuestionCount(
+      settingsQuestionCount,
+      questionMaxLimit,
+    );
+    const payload = {
+      name: trimmedName,
+      visibility: settingsVisibility,
+      questionCount: nextQuestionCount,
+      maxPlayers: nextMaxPlayers,
+      ...(settingsPasswordDirty ? { password: settingsPassword } : {}),
+    };
+    const success = await onUpdateRoomSettings(payload);
+    if (success) {
+      closeSettingsModal();
+    }
+  };
+
   const openConfirmModal = (title: string, detail: string | undefined, action: () => void) => {
     confirmActionRef.current = action;
     setConfirmModal({ title, detail });
@@ -623,7 +730,11 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
             </Typography>
             <Chip
               size="small"
-              label={`${participants.length} 人`}
+              label={
+                currentRoom?.maxPlayers
+                  ? `${participants.length}/${currentRoom.maxPlayers} 人`
+                  : `${participants.length} 人`
+              }
               color="success"
               variant="outlined"
             />
@@ -688,6 +799,15 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
               >
                 開始遊戲
               </Button>
+            )}
+            {isHost && (
+              <IconButton
+                size="small"
+                color="inherit"
+                onClick={openSettingsModal}
+              >
+                <SettingsOutlinedIcon fontSize="small" />
+              </IconButton>
             )}
             {isHost && (
               <Button
@@ -763,6 +883,14 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                 size="small"
                 variant="outlined"
                 label="有密碼"
+                className="text-slate-200 border-slate-600"
+              />
+            )}
+            {currentRoom?.visibility === "private" && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label="私人"
                 className="text-slate-200 border-slate-600"
               />
             )}
@@ -1434,6 +1562,145 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
           )}
         </Box>
       </CardContent>
+      <Dialog
+        open={settingsOpen}
+        onClose={closeSettingsModal}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>房間設定</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            {settingsDisabled && (
+              <Typography variant="caption" className="text-amber-300">
+                遊戲進行中，暫停修改房間設定。
+              </Typography>
+            )}
+            <TextField
+              label="房間名稱"
+              value={settingsName}
+              onChange={(e) => {
+                setSettingsName(e.target.value);
+                if (settingsError) {
+                  setSettingsError(null);
+                }
+              }}
+              disabled={settingsDisabled}
+              fullWidth
+            />
+            <Stack spacing={1}>
+              <Typography variant="subtitle2" className="text-slate-200">
+                房間可見度
+              </Typography>
+              <ButtonGroup size="small" variant="outlined">
+                <Button
+                  variant={settingsVisibility === "public" ? "contained" : "outlined"}
+                  onClick={() => setSettingsVisibility("public")}
+                  disabled={settingsDisabled}
+                >
+                  公開
+                </Button>
+                <Button
+                  variant={settingsVisibility === "private" ? "contained" : "outlined"}
+                  onClick={() => setSettingsVisibility("private")}
+                  disabled={settingsDisabled}
+                >
+                  私人
+                </Button>
+              </ButtonGroup>
+              <Typography variant="caption" className="text-slate-400">
+                私人房間不會出現在列表，只能透過邀請連結加入。
+              </Typography>
+            </Stack>
+            <Stack spacing={1}>
+              <TextField
+                label="房間密碼"
+                value={settingsPassword}
+                onChange={(e) => {
+                  setSettingsPassword(e.target.value);
+                  setSettingsPasswordDirty(true);
+                }}
+                placeholder="可留空"
+                disabled={settingsDisabled}
+                fullWidth
+              />
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setSettingsPassword("");
+                    setSettingsPasswordDirty(true);
+                  }}
+                  disabled={settingsDisabled || !settingsPassword}
+                >
+                  清除
+                </Button>
+                <Typography variant="caption" className="text-slate-400">
+                  不修改密碼可留空，私人房間允許空白密碼。
+                </Typography>
+              </Stack>
+            </Stack>
+            <Stack spacing={1}>
+              <TextField
+                label="人數上限"
+                type="number"
+                value={settingsMaxPlayers}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!/^\d*$/.test(next)) return;
+                  setSettingsMaxPlayers(next);
+                  if (settingsError) {
+                    setSettingsError(null);
+                  }
+                }}
+                inputProps={{ min: PLAYER_MIN, max: PLAYER_MAX, inputMode: "numeric" }}
+                placeholder="留空表示不限制"
+                disabled={settingsDisabled}
+                fullWidth
+              />
+              <Typography variant="caption" className="text-slate-400">
+                留空代表不限制，最多 {PLAYER_MAX} 人。
+              </Typography>
+            </Stack>
+            <Stack spacing={1}>
+              <Typography variant="subtitle2" className="text-slate-200">
+                題數
+              </Typography>
+              <QuestionCountControls
+                value={settingsQuestionCount}
+                min={questionMinLimit}
+                max={questionMaxLimit}
+                step={QUESTION_STEP}
+                disabled={settingsDisabled}
+                onChange={(nextValue) => {
+                  setSettingsQuestionCount(nextValue);
+                  if (settingsError) {
+                    setSettingsError(null);
+                  }
+                }}
+              />
+            </Stack>
+            {settingsError && (
+              <Typography variant="caption" className="text-rose-300">
+                {settingsError}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeSettingsModal} variant="text">
+            取消
+          </Button>
+          <Button
+            onClick={() => void handleSaveSettings()}
+            variant="contained"
+            disabled={settingsDisabled}
+          >
+            儲存
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={Boolean(confirmModal)} onClose={closeConfirmModal}>
         <DialogTitle>{confirmModal?.title ?? "切換播放清單"}</DialogTitle>
         <DialogContent>

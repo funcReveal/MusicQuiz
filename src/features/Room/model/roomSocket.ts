@@ -40,6 +40,7 @@ type RoomSocketHandlers = {
     gameState: GameState;
     serverNow: number;
   }) => void;
+  onRoomUpdated?: (payload: { room: RoomSummary }) => void;
   onKicked?: (payload: {
     roomId: string;
     reason: string;
@@ -84,6 +85,7 @@ export const connectRoomSocket = (
   );
   socket.on("gameStarted", (payload) => handlers.onGameStarted?.(payload));
   socket.on("gameUpdated", (payload) => handlers.onGameUpdated?.(payload));
+  socket.on("roomUpdated", (payload) => handlers.onRoomUpdated?.(payload));
   socket.on("kicked", (payload) => handlers.onKicked?.(payload));
   socket.on("playlistSuggestionsUpdated", (payload) =>
     handlers.onPlaylistSuggestionsUpdated?.(payload),

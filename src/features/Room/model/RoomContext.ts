@@ -120,6 +120,13 @@ export interface RoomContextValue {
   handleSendMessage: () => void;
   handleStartGame: () => void;
   handleSubmitChoice: (choiceIndex: number) => void;
+  handleUpdateRoomSettings: (payload: {
+    name?: string;
+    visibility?: "public" | "private";
+    password?: string | null;
+    questionCount?: number;
+    maxPlayers?: number | null;
+  }) => Promise<boolean>;
   handleKickPlayer: (targetClientId: string, durationMs?: number | null) => void;
   handleTransferHost: (targetClientId: string) => void;
   handleSuggestPlaylist: (type: "collection" | "playlist", value: string) => void;

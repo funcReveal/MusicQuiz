@@ -84,6 +84,8 @@ export interface RoomSummary {
   gameSettings?: {
     questionCount: number;
   };
+  visibility?: "public" | "private";
+  maxPlayers?: number | null;
 }
 
 export interface RoomState {
@@ -161,6 +163,17 @@ export interface ClientToServerEvents {
     payload: { roomId: string; choiceIndex: number },
     callback?: (ack: Ack<null>) => void
   ) => void;
+  updateRoomSettings: (
+    payload: {
+      roomId: string;
+      name?: string;
+      visibility?: "public" | "private";
+      password?: string | null;
+      questionCount?: number;
+      maxPlayers?: number | null;
+    },
+    callback?: (ack: Ack<{ room: RoomSummary }>) => void
+  ) => void;
   kickPlayer: (
     payload: { roomId: string; targetClientId: string; durationMs?: number | null },
     callback?: (ack: Ack<null>) => void
@@ -210,6 +223,7 @@ export interface ServerToClientEvents {
   messageAdded: (payload: { roomId: string; message: ChatMessage }) => void;
   gameStarted: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
   gameUpdated: (payload: { roomId: string; gameState: GameState; serverNow: number }) => void;
+  roomUpdated: (payload: { room: RoomSummary }) => void;
   kicked: (payload: { roomId: string; reason: string; bannedUntil: number | null }) => void;
   playlistSuggestionsUpdated: (payload: { roomId: string; suggestions: PlaylistSuggestion[] }) => void;
 }

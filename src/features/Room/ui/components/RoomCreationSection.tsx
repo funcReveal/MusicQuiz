@@ -19,6 +19,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { List as VirtualList, type RowComponentProps } from "react-window";
 import type { PlaylistItem, RoomSummary } from "../../model/types";
+import QuestionCountControls from "./QuestionCountControls";
 
 interface RoomCreationSectionProps {
   roomName: string;
@@ -283,14 +284,6 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
     );
   };
 
-  const adjustQuestionCount = (delta: number) => {
-    const next = Math.min(
-      questionMax,
-      Math.max(questionMin, questionCount + delta),
-    );
-    onQuestionCountChange(next);
-  };
-
   return (
     <div className="flex flex-col gap-3">
       <Card variant="outlined" className="w-full room-create-card">
@@ -419,105 +412,16 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = ({
               </Stack>
             </AccordionSummary>
             <AccordionDetails>
-              <Stack
-                direction={"row"}
-                spacing={1.5}
-                alignItems={{ sm: "center" }}
-                sx={{
-                  p: 1,
-                  minWidth: "fit-content",
+              <QuestionCountControls
+                value={questionCount}
+                min={questionMin}
+                max={questionMax}
+                step={questionStep}
+                disabled={!canAdjustQuestions}
+                onChange={(nextValue) => {
+                  onQuestionCountChange(nextValue);
                 }}
-              >
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => onQuestionCountChange(questionMin)}
-                    disabled={
-                      !canAdjustQuestions || questionCount === questionMin
-                    }
-                  >
-                    最小
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(-questionStep)}
-                    disabled={
-                      !canAdjustQuestions || questionCount <= questionMin
-                    }
-                  >
-                    -{questionStep}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(-1)}
-                    disabled={
-                      !canAdjustQuestions || questionCount <= questionMin
-                    }
-                  >
-                    -1
-                  </Button>
-                </Stack>
-
-                <Stack
-                  spacing={0.25}
-                  alignItems={"center"}
-                  sx={{ minWidth: 120 }}
-                >
-                  <Typography variant="body2" className="room-create-muted">
-                    題數
-                  </Typography>
-                  <Typography variant="h4" className="room-create-figure">
-                    {questionCount}
-                  </Typography>
-                  <Typography variant="caption" className="room-create-muted">
-                    {questionMin}–{questionMax}
-                  </Typography>
-                </Stack>
-
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(1)}
-                    disabled={
-                      !canAdjustQuestions || questionCount >= questionMax
-                    }
-                  >
-                    +1
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => adjustQuestionCount(questionStep)}
-                    disabled={
-                      !canAdjustQuestions || questionCount >= questionMax
-                    }
-                  >
-                    +{questionStep}
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    className="room-create-accent-button"
-                    onClick={() => onQuestionCountChange(questionMax)}
-                    disabled={
-                      !canAdjustQuestions || questionCount === questionMax
-                    }
-                  >
-                    最大
-                  </Button>
-                </Stack>
-              </Stack>
+              />
             </AccordionDetails>
           </Accordion>
 

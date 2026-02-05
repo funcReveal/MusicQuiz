@@ -52,6 +52,7 @@ const RoomLobbyPage: React.FC = () => {
     loadMorePlaylist,
     handleStartGame,
     handleSubmitChoice,
+    handleUpdateRoomSettings,
     handleKickPlayer,
     handleTransferHost,
     handleSuggestPlaylist,
@@ -90,7 +91,9 @@ const RoomLobbyPage: React.FC = () => {
           room={currentRoom}
           gameState={gameState}
           playlist={gamePlaylist.length > 0 ? gamePlaylist : playlistViewItems}
-          onBack={() => setIsGameView(false)}
+          onExitGame={() =>
+            handleLeaveRoom(() => navigate("/rooms", { replace: true }))
+          }
           onSubmitChoice={handleSubmitChoice}
           participants={participants}
           meClientId={clientId}
@@ -144,6 +147,7 @@ const RoomLobbyPage: React.FC = () => {
           onSend={handleSendMessage}
           onLoadMorePlaylist={loadMorePlaylist}
           onStartGame={handleStartGame}
+          onUpdateRoomSettings={handleUpdateRoomSettings}
           onOpenGame={() => setIsGameView(true)}
           onKickPlayer={handleKickPlayer}
           onTransferHost={handleTransferHost}

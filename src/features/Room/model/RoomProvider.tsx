@@ -608,6 +608,10 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           setIsGameView(true);
         }
       },
+      onRoomUpdated: ({ room }) => {
+        if (room.id !== currentRoomIdRef.current) return;
+        setCurrentRoom((prev) => (prev ? { ...prev, ...room } : prev));
+      },
       onKicked: ({ roomId, reason, bannedUntil }) => {
         if (roomId !== currentRoomIdRef.current) return;
         const suffix =
@@ -929,6 +933,51 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     });
   }, [currentRoom, gameState, getSocket]);
 
+  const handleUpdateRoomSettings = useCallback(
+    async (payload: {
+      name?: string;
+      visibility?: "public" | "private";
+      password?: string | null;
+      questionCount?: number;
+      maxPlayers?: number | null;
+    }) => {
+      const s = getSocket();
+      if (!s || !currentRoom) {
+        setStatusText("尚未加入任何房間");
+        return false;
+      }
+      return await new Promise<boolean>((resolve) => {
+        s.emit(
+          "updateRoomSettings",
+          { roomId: currentRoom.id, ...payload },
+          (ack: Ack<{ room: RoomSummary }>) => {
+            if (!ack) {
+              resolve(false);
+              return;
+            }
+            if (!ack.ok) {
+              setStatusText(`更新房間設定失敗：{ack.error}`);
+              resolve(false);
+              return;
+            }
+            setCurrentRoom((prev) =>
+              prev ? { ...prev, ...ack.data.room } : prev,
+            );
+            if (payload.password !== undefined) {
+              const trimmed = payload.password?.trim() ?? "";
+              const nextPassword = trimmed ? trimmed : null;
+              saveRoomPassword(currentRoom.id, nextPassword);
+              setHostRoomPassword(nextPassword);
+            }
+            setStatusText("房間設定已更新");
+            resolve(true);
+          },
+        );
+      });
+    },
+    [currentRoom, getSocket, saveRoomPassword, setStatusText],
+  );
+
   const handleKickPlayer = useCallback(
     (targetClientId: string, durationMs?: number | null) => {
       const s = getSocket();
@@ -1222,6 +1271,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       handleSendMessage,
       handleStartGame,
       handleSubmitChoice,
+      handleUpdateRoomSettings,
       handleKickPlayer,
       handleTransferHost,
       handleSuggestPlaylist,
@@ -1318,6 +1368,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       handleSendMessage,
       handleStartGame,
       handleSubmitChoice,
+      handleUpdateRoomSettings,
       handleKickPlayer,
       handleTransferHost,
       handleSuggestPlaylist,

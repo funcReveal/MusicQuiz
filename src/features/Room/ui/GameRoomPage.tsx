@@ -5,7 +5,17 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Button, Chip, LinearProgress, Switch } from "@mui/material";
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  LinearProgress,
+  Switch,
+  Typography,
+} from "@mui/material";
 import type {
   ChatMessage,
   GameState,
@@ -19,7 +29,7 @@ interface GameRoomPageProps {
   room: RoomState["room"];
   gameState: GameState;
   playlist: PlaylistItem[];
-  onBack: () => void;
+  onExitGame: () => void;
   onSubmitChoice: (choiceIndex: number) => void;
   participants?: RoomState["participants"];
   meClientId?: string;
@@ -51,7 +61,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   room,
   gameState,
   playlist,
-  onBack,
+  onExitGame,
   onSubmitChoice,
   participants = [],
   meClientId,
@@ -78,6 +88,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   }>({ trackIndex: -1, choiceIndex: null });
   const [loadedTrackKey, setLoadedTrackKey] = useState<string | null>(null);
   const [playerVideoId, setPlayerVideoId] = useState<string | null>(null);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const { keyBindings } = useKeyBindings();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hasStartedPlaybackRef = useRef(false);
@@ -98,6 +109,13 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const lastPlayerTimeSecRef = useRef<number | null>(null);
   const lastPlayerTimeAtMsRef = useRef<number>(0);
   const lastTimeRequestReasonRef = useRef("init");
+
+  const openExitConfirm = () => setExitConfirmOpen(true);
+  const closeExitConfirm = () => setExitConfirmOpen(false);
+  const handleExitConfirm = () => {
+    setExitConfirmOpen(false);
+    onExitGame();
+  };
   const revealReplayRef = useRef(false);
   const lastRevealStartKeyRef = useRef<string | null>(null);
   const PLAYER_ID = "mq-main-player";
@@ -1095,9 +1113,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 variant="outlined"
                 color="inherit"
                 size="small"
-                onClick={onBack}
+                onClick={openExitConfirm}
               >
-                返回聊天室
+                退出遊戲
               </Button>
             </div>
 
@@ -1383,9 +1401,9 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                             size="small"
                             variant="outlined"
                             color="inherit"
-                            onClick={onBack}
+                            onClick={openExitConfirm}
                           >
-                            返回聊天室
+                            退出遊戲
                           </Button>
                         </div>
                       )}
@@ -1401,6 +1419,22 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
             )}
           </div>
         </section>
+        <Dialog open={exitConfirmOpen} onClose={closeExitConfirm}>
+          <DialogTitle>退出遊戲？</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" className="text-slate-600">
+              確定要放棄本局並返回房間列表嗎？
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeExitConfirm} variant="text">
+              取消
+            </Button>
+            <Button onClick={handleExitConfirm} variant="contained" color="error">
+              退出遊戲
+            </Button>
+          </DialogActions>
+        </Dialog>
       </div>
     </div>
   );

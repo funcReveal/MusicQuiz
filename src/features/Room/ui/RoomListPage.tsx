@@ -147,6 +147,9 @@ const RoomListPage: React.FC = () => {
               ) : (
                 rooms.map((room, index) => {
                   const isCurrent = currentRoomId === room.id;
+                  const isFull = Boolean(
+                    room.maxPlayers && room.playerCount >= room.maxPlayers,
+                  );
                   return (
                     <div
                       key={room.id}
@@ -181,7 +184,10 @@ const RoomListPage: React.FC = () => {
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--mc-text-muted)]">
-                            <span>玩家 {room.playerCount}</span>
+                            <span>
+                              玩家 {room.playerCount}
+                              {room.maxPlayers ? `/${room.maxPlayers}` : ""}
+                            </span>
                             <span>播放清單 {room.playlistCount}</span>
                             <span>
                               建立 {new Date(room.createdAt).toLocaleTimeString()}
@@ -190,6 +196,11 @@ const RoomListPage: React.FC = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
+                          {isFull && (
+                            <span className="rounded-full border border-rose-400/40 bg-rose-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-200">
+                              已滿
+                            </span>
+                          )}
                           {room.hasPassword && (
                             <input
                               className="w-28 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/70 px-2 py-1 text-xs text-[var(--mc-text)] placeholder:text-slate-500 focus:border-[var(--mc-accent)] focus:outline-none"
@@ -208,7 +219,7 @@ const RoomListPage: React.FC = () => {
                             onClick={() =>
                               handleJoinRoom(room.id, room.hasPassword)
                             }
-                            disabled={!username}
+                            disabled={!username || isFull}
                             className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-accent)]/60 bg-[var(--mc-accent)]/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--mc-text)] transition hover:border-[var(--mc-accent)] hover:bg-[var(--mc-accent)]/40 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             進入

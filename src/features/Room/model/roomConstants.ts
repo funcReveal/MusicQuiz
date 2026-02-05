@@ -15,6 +15,8 @@ export const DEFAULT_CLIP_SEC = 30;
 export const QUESTION_MIN = 5;
 export const QUESTION_MAX = 100;
 export const QUESTION_STEP = 5;
+export const PLAYER_MIN = 1;
+export const PLAYER_MAX = 100;
 
 export const STORAGE_KEYS = {
   clientId: "mq_clientId",
