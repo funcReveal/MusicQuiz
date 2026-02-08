@@ -1,10 +1,14 @@
 import { Button, Switch, TextField, Tooltip } from "@mui/material";
+import ArrowBackIosNew from "@mui/icons-material/ArrowBackIosNew";
 import CloudDoneOutlined from "@mui/icons-material/CloudDoneOutlined";
 import CloudUploadOutlined from "@mui/icons-material/CloudUploadOutlined";
 import CloudOffOutlined from "@mui/icons-material/CloudOffOutlined";
 import SaveOutlined from "@mui/icons-material/SaveOutlined";
 import LockOutlined from "@mui/icons-material/LockOutlined";
 import PublicOutlined from "@mui/icons-material/PublicOutlined";
+import FolderOpenOutlined from "@mui/icons-material/FolderOpenOutlined";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import ExpandLess from "@mui/icons-material/ExpandLess";
 
 type EditHeaderProps = {
   title: string;
@@ -146,19 +150,29 @@ const EditHeader = ({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outlined" size="small" onClick={onBack}>
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/40 px-3 py-1 text-xs text-[var(--mc-text)] transition hover:border-[var(--mc-accent)]/60 hover:bg-[var(--mc-surface-strong)]/60"
+        >
+          <ArrowBackIosNew fontSize="inherit" />
           返回收藏庫
-        </Button>
+        </button>
         <button
           type="button"
           onClick={onCollectionButtonClick}
           className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/70 px-3 py-1 text-xs text-[var(--mc-text)] hover:border-[var(--mc-accent)]/60"
         >
+          <FolderOpenOutlined fontSize="inherit" />
           收藏庫
           <span className="text-[10px] text-[var(--mc-text-muted)]">
             {collectionCount}
           </span>
-          <span className="text-xs">{collectionMenuOpen ? "▲" : "▼"}</span>
+          {collectionMenuOpen ? (
+            <ExpandLess fontSize="inherit" />
+          ) : (
+            <ExpandMore fontSize="inherit" />
+          )}
         </button>
         <button
           type="button"
@@ -166,7 +180,11 @@ const EditHeader = ({
           className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/70 px-3 py-1 text-xs text-[var(--mc-text)] hover:border-[var(--mc-accent)]/60"
         >
           播放清單
-          <span className="text-xs">{playlistMenuOpen ? "▲" : "▼"}</span>
+          {playlistMenuOpen ? (
+            <ExpandLess fontSize="inherit" />
+          ) : (
+            <ExpandMore fontSize="inherit" />
+          )}
         </button>
         <div className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/70 px-2 py-1">
           <Tooltip title={visibility === "public" ? "公開中" : "私人"}>

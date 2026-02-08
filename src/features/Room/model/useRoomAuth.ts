@@ -241,11 +241,7 @@ export const useRoomAuth = ({
     }
     const redirectUri =
       import.meta.env.VITE_GOOGLE_REDIRECT_URI ?? window.location.origin;
-    const isMobile =
-      /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(
-        navigator.userAgent,
-      ) || window.matchMedia("(max-width: 768px)").matches;
-    const uxMode = isMobile ? "redirect" : "popup";
+    const uxMode: "popup" | "redirect" = "popup";
 
     ensureGoogleScript()
       .then(() => {
