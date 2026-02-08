@@ -88,9 +88,9 @@ const CollectionsPage = () => {
     refreshAuthToken,
   } = useRoom();
   const [collections, setCollections] = useState<DbCollection[]>([]);
-  const [collectionThumbs, setCollectionThumbs] = useState<Record<string, string>>(
-    {},
-  );
+  const [collectionThumbs, setCollectionThumbs] = useState<
+    Record<string, string>
+  >({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [visibilityUpdatingId, setVisibilityUpdatingId] = useState<
     string | null
@@ -328,7 +328,10 @@ const CollectionsPage = () => {
   return (
     <Box className="w-full md:w-full lg:w-3/5 mx-auto space-y-4">
       <Box className="flex items-center justify-between gap-3">
-        <Typography variant="h6" className="text-[var(--mc-text)] font-semibold">
+        <Typography
+          variant="h6"
+          className="text-[var(--mc-text)] font-semibold"
+        >
           {TEXT.title}
         </Typography>
       </Box>
@@ -337,11 +340,6 @@ const CollectionsPage = () => {
         <CollectionsSkeleton />
       ) : (
         <>
-          {loading && (
-            <Typography variant="caption" className="text-[var(--mc-text-muted)]">
-              {TEXT.loading}
-            </Typography>
-          )}
           {error && (
             <Typography variant="body2" className="text-rose-300">
               {error}
@@ -350,7 +348,6 @@ const CollectionsPage = () => {
 
           <Box className="grid auto-rows-[1fr] gap-3 sm:grid-cols-2">
             <Card
-              variant="outlined"
               sx={{
                 backgroundColor: "var(--mc-bg)",
                 borderColor: "var(--mc-border)",
@@ -396,7 +393,9 @@ const CollectionsPage = () => {
                   )}
                   <Box className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
                   <CardActionArea
-                    onClick={() => navigate(`/collections/${collection.id}/edit`)}
+                    onClick={() =>
+                      navigate(`/collections/${collection.id}/edit`)
+                    }
                     className="relative z-10 h-full"
                   >
                     <CardContent className="flex h-full flex-col justify-between">
@@ -426,7 +425,9 @@ const CollectionsPage = () => {
                                 ) : (
                                   <LockOutlined fontSize="inherit" />
                                 )}
-                                {collection.visibility === "public" ? "公開" : "私人"}
+                                {collection.visibility === "public"
+                                  ? "公開"
+                                  : "私人"}
                               </span>
                             </Tooltip>
                             <Switch
@@ -446,7 +447,9 @@ const CollectionsPage = () => {
                                     )
                               }
                               sx={{
-                                "& .MuiSwitch-thumb": { backgroundColor: "white" },
+                                "& .MuiSwitch-thumb": {
+                                  backgroundColor: "white",
+                                },
                                 "& .MuiSwitch-track": {
                                   backgroundColor: "rgba(255,255,255,0.2)",
                                   opacity: 1,

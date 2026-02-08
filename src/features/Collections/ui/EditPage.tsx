@@ -388,13 +388,6 @@ const EditPage = () => {
       pendingDeleteIds,
     );
     const isDirty = snapshot !== baselineSnapshotRef.current;
-    if (isDirty && dirtyCounterRef.current === 0) {
-      baselineSnapshotRef.current = snapshot;
-      if (hasUnsavedChanges) {
-        setHasUnsavedChanges(false);
-      }
-      return;
-    }
     if (isDirty !== hasUnsavedChanges) {
       setHasUnsavedChanges(isDirty);
     }
@@ -540,6 +533,51 @@ const EditPage = () => {
     ],
   );
 
+  const appendItems = useCallback(
+    (
+      incoming: EditableItem[],
+      options?: { selectLast?: boolean; scrollToLast?: boolean },
+    ) => {
+      if (!incoming.length) return { added: 0, duplicates: 0 };
+      let addedCount = 0;
+      let duplicateCount = 0;
+      let firstAddedIndex: number | null = null;
+      let lastAddedLocalId: string | null = null;
+
+      setPlaylistItems((prev) => {
+        const existingKeys = new Set(
+          prev.map((item) => getPlaylistItemKey(item)).filter(Boolean),
+        );
+        const next = [...prev];
+        incoming.forEach((item) => {
+          const key = getPlaylistItemKey(item);
+          if (key && existingKeys.has(key)) {
+            duplicateCount += 1;
+            return;
+          }
+          if (key) existingKeys.add(key);
+          if (firstAddedIndex === null) firstAddedIndex = next.length;
+          next.push(item);
+          lastAddedLocalId = item.localId;
+          addedCount += 1;
+        });
+        return next;
+      });
+
+      if (addedCount > 0) {
+        markDirty();
+        if (options?.selectLast && lastAddedLocalId) {
+          setSelectedItemId(lastAddedLocalId);
+        }
+        if (options?.scrollToLast && firstAddedIndex !== null) {
+          setPendingScrollIndex(firstAddedIndex + addedCount - 1);
+        }
+      }
+      return { added: addedCount, duplicates: duplicateCount };
+    },
+    [markDirty, setPlaylistItems],
+  );
+
   useEffect(() => {
     if (hasResetPlaylistRef.current) return;
     hasResetPlaylistRef.current = true;
@@ -574,31 +612,9 @@ const EditPage = () => {
     if (fetchedPlaylistItems.length === 0) return;
 
     const incoming = buildEditableItems(fetchedPlaylistItems);
-    let duplicateCount = 0;
-    let addedCount = 0;
+    const { added, duplicates } = appendItems(incoming);
 
-    setPlaylistItems((prev) => {
-      const existingKeys = new Set(
-        prev.map((item) => getPlaylistItemKey(item)).filter(Boolean),
-      );
-      const next = [...prev];
-      incoming.forEach((item) => {
-        const key = getPlaylistItemKey(item);
-        if (key && existingKeys.has(key)) {
-          duplicateCount += 1;
-          return;
-        }
-        if (key) existingKeys.add(key);
-        next.push(item);
-        addedCount += 1;
-      });
-      return next;
-    });
-    if (addedCount > 0) {
-      markDirty();
-    }
-
-    if (duplicateCount > 0) {
+    if (duplicates > 0) {
       setPlaylistAddError(DUPLICATE_SONG_ERROR);
     }
 
@@ -610,7 +626,7 @@ const EditPage = () => {
     playlistError,
     fetchedPlaylistItems,
     handleResetPlaylist,
-    markDirty,
+    appendItems,
   ]);
 
   useEffect(() => {
@@ -1010,14 +1026,7 @@ const EditPage = () => {
       answerText: singleTrackAnswer.trim() || resolvedTitle,
     };
 
-    setPlaylistItems((prev) => {
-      const insertIndex = prev.length;
-      const next = [...prev, newItem];
-      setSelectedItemId(newItem.localId);
-      setPendingScrollIndex(insertIndex);
-      return next;
-    });
-    markDirty();
+    appendItems([newItem], { selectLast: true, scrollToLast: true });
     setSingleTrackUrl("");
     setSingleTrackTitle("");
     setSingleTrackDuration("");

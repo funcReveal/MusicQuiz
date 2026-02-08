@@ -226,8 +226,8 @@ export const useCollectionEditor = ({
           token: string,
           allowRetry: boolean,
         ): Promise<DbCollection | null> => {
+          let created: DbCollection | null = null;
           if (!collectionId) {
-            let created: DbCollection | null = null;
             try {
               created = await collectionsApi.createCollection(token, {
                 owner_id: ownerId,
@@ -248,33 +248,33 @@ export const useCollectionEditor = ({
               throw new Error("Missing collection id");
             }
             collectionId = created.id;
-            return created;
-          }
-          try {
-            await collectionsApi.updateCollection(token, collectionId, {
-              title: collectionTitle.trim(),
-              visibility: collectionVisibility,
-            });
-          } catch (error) {
-            if (allowRetry && isAuthError(error)) {
-              const refreshed = await refreshAuthToken();
-              if (refreshed) {
-                return run(refreshed, false);
+          } else {
+            try {
+              await collectionsApi.updateCollection(token, collectionId, {
+                title: collectionTitle.trim(),
+                visibility: collectionVisibility,
+              });
+            } catch (error) {
+              if (allowRetry && isAuthError(error)) {
+                const refreshed = await refreshAuthToken();
+                if (refreshed) {
+                  return run(refreshed, false);
+                }
               }
+              throw error;
             }
-            throw error;
+            setCollections((prev) =>
+              prev.map((item) =>
+                item.id === collectionId
+                  ? {
+                      ...item,
+                      title: collectionTitle.trim(),
+                      visibility: collectionVisibility,
+                    }
+                  : item,
+              ),
+            );
           }
-          setCollections((prev) =>
-            prev.map((item) =>
-              item.id === collectionId
-                ? {
-                    ...item,
-                    title: collectionTitle.trim(),
-                    visibility: collectionVisibility,
-                  }
-                : item,
-            ),
-          );
 
           if (collectionId) {
             try {
@@ -289,7 +289,7 @@ export const useCollectionEditor = ({
               throw error;
             }
           }
-          return null;
+          return created;
         };
 
         const createdCollection = await run(token, true);
