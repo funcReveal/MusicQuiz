@@ -1,5 +1,5 @@
-import React from "react";
-import { Link, Outlet } from "react-router-dom";
+import React, { useCallback, useMemo, useState } from "react";
+import { Link, Outlet, useNavigate } from "react-router-dom";
 import {
   Button,
   Dialog,
@@ -12,8 +12,12 @@ import {
 import HeaderSection from "./components/HeaderSection";
 import LoginPage from "./components/LoginPage";
 import { useRoom } from "../model/useRoom";
+import ConfirmDialog from "../../../shared/ui/ConfirmDialog";
+
+type NavigationTarget = "rooms" | "collections";
 
 const RoomsLayoutShell: React.FC = () => {
+  const navigate = useNavigate();
   const {
     authLoading,
     authUser,
@@ -32,7 +36,107 @@ const RoomsLayoutShell: React.FC = () => {
     usernameInput,
     setUsernameInput,
     handleSetUsername,
+    currentRoom,
+    gameState,
+    handleLeaveRoom,
+    setStatusText,
   } = useRoom();
+  const [loginConfirmOpen, setLoginConfirmOpen] = useState(false);
+  const [navigationConfirmTarget, setNavigationConfirmTarget] =
+    useState<NavigationTarget | null>(null);
+
+  const loginConfirmText = useMemo(() => {
+    if (gameState?.status === "playing") {
+      return {
+        title: "放棄本局並登入？",
+        description:
+          "目前正在遊戲中。若繼續登入，會先退出房間並放棄本局遊戲，接著返回房間列表。",
+      };
+    }
+    return {
+      title: "退出房間並登入？",
+      description: "你目前在房間內。若繼續登入，會先退出房間並返回房間列表。",
+    };
+  }, [gameState?.status]);
+
+  const startGoogleLogin = useCallback(() => {
+    if (authLoading) return;
+    loginWithGoogle();
+  }, [authLoading, loginWithGoogle]);
+
+  const handleLoginRequest = useCallback(() => {
+    if (!currentRoom) {
+      startGoogleLogin();
+      return;
+    }
+    setLoginConfirmOpen(true);
+  }, [currentRoom, startGoogleLogin]);
+
+  const handleConfirmLogin = useCallback(() => {
+    setLoginConfirmOpen(false);
+    if (!currentRoom) {
+      startGoogleLogin();
+      return;
+    }
+    handleLeaveRoom(() => {
+      navigate("/rooms", { replace: true });
+      setStatusText("已退出房間，準備登入 Google");
+      startGoogleLogin();
+    });
+  }, [currentRoom, handleLeaveRoom, navigate, setStatusText, startGoogleLogin]);
+
+  const handleNavigateRequest = useCallback(
+    (target: NavigationTarget) => {
+      const path = target === "rooms" ? "/rooms" : "/collections";
+      if (!currentRoom) {
+        navigate(path);
+        return;
+      }
+      setNavigationConfirmTarget(target);
+    },
+    [currentRoom, navigate],
+  );
+
+  const navigationConfirmText = useMemo(() => {
+    if (!navigationConfirmTarget) return null;
+    const targetLabel =
+      navigationConfirmTarget === "rooms" ? "房間列表" : "收藏庫";
+    if (gameState?.status === "playing") {
+      return {
+        title: `放棄本局並前往${targetLabel}？`,
+        description: `目前正在遊戲中。若繼續，會先退出房間並放棄本局遊戲，再跳轉到${targetLabel}。`,
+      };
+    }
+    return {
+      title: `退出房間並前往${targetLabel}？`,
+      description: `你目前在房間內。若繼續，會先退出房間，再跳轉到${targetLabel}。`,
+    };
+  }, [gameState?.status, navigationConfirmTarget]);
+
+  const handleConfirmNavigation = useCallback(() => {
+    const target = navigationConfirmTarget;
+    setNavigationConfirmTarget(null);
+    if (!target) return;
+    const path = target === "rooms" ? "/rooms" : "/collections";
+    if (!currentRoom) {
+      navigate(path);
+      return;
+    }
+    handleLeaveRoom(() => {
+      navigate(path, { replace: target === "rooms" });
+      setStatusText(
+        target === "rooms"
+          ? "已退出房間，返回房間列表"
+          : "已退出房間，前往收藏庫",
+      );
+    });
+  }, [
+    currentRoom,
+    handleLeaveRoom,
+    navigate,
+    navigationConfirmTarget,
+    setStatusText,
+  ]);
 
   return (
     <div className="flex min-h-screen bg-[var(--mc-bg)] text-[var(--mc-text)] justify-center items-start p-4">
@@ -41,9 +145,11 @@ const RoomsLayoutShell: React.FC = () => {
           displayUsername={displayUsername}
           authUser={authUser}
           authLoading={authLoading}
-          onLogin={loginWithGoogle}
+          onLogin={handleLoginRequest}
           onLogout={logout}
           onEditProfile={openProfileEditor}
+          onNavigateRooms={() => handleNavigateRequest("rooms")}
+          onNavigateCollections={() => handleNavigateRequest("collections")}
         />
 
         {!authLoading && !username && !authUser && (
@@ -51,7 +157,7 @@ const RoomsLayoutShell: React.FC = () => {
             usernameInput={usernameInput}
             onInputChange={setUsernameInput}
             onConfirm={handleSetUsername}
-            onGoogleLogin={loginWithGoogle}
+            onGoogleLogin={handleLoginRequest}
             googleLoading={authLoading}
           />
         )}
@@ -71,6 +177,24 @@ const RoomsLayoutShell: React.FC = () => {
         {statusText && (
           <Snackbar message={`Status: ${statusText}`} open={true} />
         )}
+        <ConfirmDialog
+          open={loginConfirmOpen}
+          title={loginConfirmText.title}
+          description={loginConfirmText.description}
+          confirmLabel="退出並登入"
+          cancelLabel="取消"
+          onConfirm={handleConfirmLogin}
+          onCancel={() => setLoginConfirmOpen(false)}
+        />
+        <ConfirmDialog
+          open={Boolean(navigationConfirmTarget)}
+          title={navigationConfirmText?.title ?? ""}
+          description={navigationConfirmText?.description ?? ""}
+          confirmLabel="退出並前往"
+          cancelLabel="取消"
+          onConfirm={handleConfirmNavigation}
+          onCancel={() => setNavigationConfirmTarget(null)}
+        />
         <Dialog
           open={needsNicknameConfirm || isProfileEditorOpen}
           onClose={() => {

@@ -147,23 +147,40 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   useEffect(() => {
     lastSyncMsRef.current = Date.now() + serverOffsetMs;
   }, [serverOffsetMs]);
-  const applyVolume = useCallback((val: number) => {
-    const target = iframeRef.current?.contentWindow;
-    if (!target) return;
-    const safeVolume = Math.min(100, Math.max(0, val));
-    try {
-      target.postMessage(
-        JSON.stringify({
+  const postPlayerMessage = useCallback(
+    (payload: Record<string, unknown>, logLabel: string) => {
+      try {
+        const frame = iframeRef.current;
+        if (!frame || !frame.isConnected) return false;
+        const target = frame.contentWindow;
+        if (!target) return false;
+        target.postMessage(JSON.stringify(payload), "*");
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.toLowerCase().includes("disconnected port")) {
+          return false;
+        }
+        console.error(`${logLabel} failed`, err);
+        return false;
+      }
+    },
+    [],
+  );
+  const applyVolume = useCallback(
+    (val: number) => {
+      const safeVolume = Math.min(100, Math.max(0, val));
+      postPlayerMessage(
+        {
           event: "command",
           func: "setVolume",
           args: [safeVolume],
-        }),
-        "*",
+        },
+        "setVolume",
       );
-    } catch (err) {
-      console.error("setVolume failed", err);
-    }
-  }, []);
+    },
+    [postPlayerMessage],
+  );
 
   const effectiveTrackOrder = useMemo(() => {
     if (gameState.trackOrder?.length) {
@@ -268,23 +285,20 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
   const showLoadingMask = isTrackLoading && !isReveal;
   const correctChoiceIndex = currentTrackIndex;
 
-  const postCommand = useCallback((func: string, args: unknown[] = []) => {
-    const target = iframeRef.current?.contentWindow;
-    if (!target) return;
-    try {
-      target.postMessage(
-        JSON.stringify({
+  const postCommand = useCallback(
+    (func: string, args: unknown[] = []) => {
+      postPlayerMessage(
+        {
           event: "command",
           func,
           args,
           id: PLAYER_ID,
-        }),
-        "*",
+        },
+        func,
       );
-    } catch (err) {
-      console.error(`${func} failed`, err);
-    }
-  }, []);
+    },
+    [postPlayerMessage],
+  );
   const requestPlayerTime = useCallback(
     (reason: string) => {
       if (!playerReadyRef.current) return;
@@ -411,7 +425,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const syncToServerPosition = useCallback(
     (
-      reason: string,
+      _reason: string,
       forceSeek = false,
       toleranceSec = RESUME_DRIFT_TOLERANCE_SEC,
       requirePlayerTime = false,
@@ -1153,17 +1167,10 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                     if (!playerVideoId && videoId) {
                       setPlayerVideoId(videoId);
                     }
-                    const target = iframeRef.current?.contentWindow;
-                    if (target) {
-                      try {
-                        target.postMessage(
-                          JSON.stringify({ event: "listening", id: PLAYER_ID }),
-                          "*",
-                        );
-                      } catch (err) {
-                        console.error("player event binding failed", err);
-                      }
-                    }
+                    postPlayerMessage(
+                      { event: "listening", id: PLAYER_ID },
+                      "player event binding",
+                    );
                     applyVolume(volume);
                   }}
                 />

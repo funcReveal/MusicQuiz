@@ -63,12 +63,13 @@ interface SuggestionPanelProps {
   collectionScope: "public" | "owner";
   onCollectionScopeChange: (scope: "public" | "owner") => void;
   collections: CollectionOption[];
+  collectionsLoading: boolean;
   isGoogleAuthed: boolean;
   youtubePlaylists: YoutubePlaylist[];
   youtubePlaylistsLoading: boolean;
   youtubePlaylistsError: string | null;
   requestCollections: (scope: "public" | "owner") => void;
-  requestYoutubePlaylists: () => void;
+  requestYoutubePlaylists: (force?: boolean) => void;
   onSuggestPlaylist: (
     type: "collection" | "playlist",
     value: string,
@@ -82,6 +83,7 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
   collectionScope,
   onCollectionScopeChange,
   collections,
+  collectionsLoading,
   isGoogleAuthed,
   youtubePlaylists,
   youtubePlaylistsLoading,
@@ -120,6 +122,54 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
   const remainingCooldownSeconds = cooldownUntil
     ? Math.max(0, Math.ceil((cooldownUntil - cooldownNow) / 1000))
     : 0;
+  const isSuggestCollectionEmptyNotice =
+    !collectionsLoading &&
+    collections.length === 0 &&
+    !(collectionScope === "owner" && !isGoogleAuthed);
+  const suggestPlaylistPrimaryText =
+    "目前為貼上連結模式，請貼上 YouTube 播放清單連結";
+  const suggestCollectionPrimaryText = (() => {
+    const scopeLabel = collectionScope === "public" ? "公開" : "私人";
+    if (collectionScope === "owner" && !isGoogleAuthed) {
+      return "目前為私人收藏庫，請先登入後再選擇收藏庫";
+    }
+    if (collectionsLoading) {
+      return `目前為${scopeLabel}收藏庫，正在讀取收藏庫清單`;
+    }
+    if (collections.length === 0) {
+      return `目前為${scopeLabel}收藏庫，請先建立後再選擇`;
+    }
+    return `目前為${scopeLabel}收藏庫，請選擇收藏庫`;
+  })();
+  const isSuggestYoutubeEmptyNotice =
+    isGoogleAuthed &&
+    !youtubePlaylistsLoading &&
+    youtubePlaylists.length === 0 &&
+    !youtubePlaylistsError;
+  const isSuggestYoutubeMissingNotice = Boolean(
+    youtubePlaylistsError &&
+      (youtubePlaylistsError.includes("尚未建立 YouTube 頻道") ||
+        youtubePlaylistsError.includes("沒有播放清單")),
+  );
+  const visibleSuggestYoutubeError =
+    youtubePlaylistsError && !isSuggestYoutubeMissingNotice
+      ? youtubePlaylistsError
+      : null;
+  const suggestYoutubePrimaryText = (() => {
+    if (!isGoogleAuthed) {
+      return "目前為我的播放清單，請先登入後再選擇播放清單";
+    }
+    if (youtubePlaylistsLoading) {
+      return "目前為我的播放清單，正在讀取播放清單";
+    }
+    if (isSuggestYoutubeMissingNotice) {
+      return "目前為我的播放清單，尚未建立 YouTube 頻道或沒有播放清單";
+    }
+    if (isSuggestYoutubeEmptyNotice) {
+      return "目前為我的播放清單，尚未建立播放清單，請先建立後再選擇";
+    }
+    return "目前為我的播放清單，請選擇播放清單";
+  })();
 
   useEffect(() => {
     if (suggestType !== "collection") return;
@@ -180,77 +230,114 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={1}>
-          <TextField
-            select
-            size="small"
-            value={suggestType}
-            onChange={(e) => {
-              setSuggestType(
-                e.target.value as "playlist" | "collection" | "youtube",
-              );
-              if (suggestError) {
-                setSuggestError(null);
-              }
-            }}
-            disabled={isSubmitting}
-            fullWidth
-          >
-            <MenuItem value="playlist">播放清單 URL</MenuItem>
-            <MenuItem value="collection">收藏庫</MenuItem>
-            <MenuItem value="youtube">我的播放清單</MenuItem>
-          </TextField>
-          {suggestType === "playlist" && (
-            <TextField
+          <Stack direction="row" className="room-lobby-mode-row">
+            <Button
               size="small"
-              value={suggestPlaylistUrl}
-              onChange={(e) => {
-                setSuggestPlaylistUrl(e.target.value);
+              variant={suggestType === "playlist" ? "contained" : "outlined"}
+              className="room-lobby-mode-button"
+              onClick={() => {
+                setSuggestType("playlist");
                 if (suggestError) {
                   setSuggestError(null);
                 }
-                if (suggestNotice && !isCooldownActive) {
-                  setSuggestNotice(null);
+              }}
+              disabled={isSubmitting}
+            >
+              貼上連結
+            </Button>
+            <Button
+              size="small"
+              variant={
+                suggestType === "collection" && collectionScope === "public"
+                  ? "contained"
+                  : "outlined"
+              }
+              className="room-lobby-mode-button"
+              onClick={() => {
+                setSuggestType("collection");
+                onCollectionScopeChange("public");
+                setSuggestCollectionId(null);
+                if (suggestError) {
+                  setSuggestError(null);
                 }
               }}
-              placeholder="貼上 YouTube 播放清單 URL"
               disabled={isSubmitting}
-              fullWidth
-            />
+            >
+              公開收藏庫
+            </Button>
+            <Button
+              size="small"
+              variant={
+                suggestType === "collection" && collectionScope === "owner"
+                  ? "contained"
+                  : "outlined"
+              }
+              className="room-lobby-mode-button"
+              onClick={() => {
+                setSuggestType("collection");
+                onCollectionScopeChange("owner");
+                setSuggestCollectionId(null);
+                if (suggestError) {
+                  setSuggestError(null);
+                }
+              }}
+              disabled={isSubmitting || !isGoogleAuthed}
+            >
+              私人收藏庫
+            </Button>
+            <Button
+              size="small"
+              variant={suggestType === "youtube" ? "contained" : "outlined"}
+              className="room-lobby-mode-button"
+              onClick={() => {
+                setSuggestType("youtube");
+                if (suggestError) {
+                  setSuggestError(null);
+                }
+              }}
+              disabled={isSubmitting}
+            >
+              我的播放清單
+            </Button>
+          </Stack>
+          {suggestType === "playlist" && (
+            <>
+              <Typography variant="caption" className="text-slate-400">
+                {suggestPlaylistPrimaryText}
+              </Typography>
+              <TextField
+                size="small"
+                value={suggestPlaylistUrl}
+                onChange={(e) => {
+                  setSuggestPlaylistUrl(e.target.value);
+                  if (suggestError) {
+                    setSuggestError(null);
+                  }
+                  if (suggestNotice && !isCooldownActive) {
+                    setSuggestNotice(null);
+                  }
+                }}
+                placeholder="貼上 YouTube 播放清單 URL"
+                disabled={isSubmitting}
+                fullWidth
+              />
+            </>
           )}
           {suggestType === "collection" && (
             <>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Button
-                  size="small"
-                  variant={
-                    collectionScope === "public" ? "contained" : "outlined"
-                  }
-                  onClick={() => {
-                    onCollectionScopeChange("public");
-                    setSuggestCollectionId(null);
-                  }}
-                >
-                  公開收藏庫
-                </Button>
-                <Button
-                  size="small"
-                  variant={
-                    collectionScope === "owner" ? "contained" : "outlined"
-                  }
-                  onClick={() => {
-                    onCollectionScopeChange("owner");
-                    setSuggestCollectionId(null);
-                  }}
-                  disabled={!isGoogleAuthed}
-                >
-                  私人收藏庫
-                </Button>
-                {!isGoogleAuthed && (
-                  <Typography variant="caption" className="text-slate-400">
-                    登入後可使用私人收藏庫
-                  </Typography>
-                )}
-              </Stack>
+              <Typography
+                variant="caption"
+                className={
+                  isSuggestCollectionEmptyNotice ? "text-rose-300" : "text-slate-400"
+                }
+              >
+                {suggestCollectionPrimaryText}
+              </Typography>
+              {!isGoogleAuthed && collectionScope === "owner" && (
+                <Typography variant="caption" className="text-slate-400">
+                  登入後可使用私人收藏庫
+                </Typography>
+              )}
               <TextField
                 select
                 size="small"
@@ -268,6 +355,20 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
                 }}
                 disabled={isSubmitting}
                 fullWidth
+                SelectProps={{
+                  displayEmpty: true,
+                  renderValue: (selected) => {
+                    const selectedId = String(selected ?? "");
+                    if (!selectedId) return "請選擇收藏庫";
+                    const selectedOption = collections.find(
+                      (item) => item.id === selectedId,
+                    );
+                    if (!selectedOption) return selectedId;
+                    return `${selectedOption.title} · ${resolveVisibilityLabel(
+                      selectedOption.visibility,
+                    )}`;
+                  },
+                }}
               >
                 <MenuItem value="">選擇收藏庫</MenuItem>
                 {collections.map((collection) => (
@@ -298,19 +399,19 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
           )}
           {suggestType === "youtube" && (
             <>
-              {!isGoogleAuthed && (
-                <Typography variant="caption" className="text-slate-400">
-                  登入後可使用我的播放清單
-                </Typography>
-              )}
-              {youtubePlaylistsLoading && (
-                <Typography variant="caption" className="text-slate-400">
-                  載入播放清單中…
-                </Typography>
-              )}
-              {youtubePlaylistsError && (
+              <Typography
+                variant="caption"
+                className={
+                  isSuggestYoutubeEmptyNotice || isSuggestYoutubeMissingNotice
+                    ? "text-rose-300"
+                    : "text-slate-400"
+                }
+              >
+                {suggestYoutubePrimaryText}
+              </Typography>
+              {visibleSuggestYoutubeError && (
                 <Typography variant="caption" className="text-rose-300">
-                  {youtubePlaylistsError}
+                  {visibleSuggestYoutubeError}
                 </Typography>
               )}
               <TextField
@@ -330,6 +431,18 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({
                 }}
                 disabled={isSubmitting || !isGoogleAuthed}
                 fullWidth
+                SelectProps={{
+                  displayEmpty: true,
+                  renderValue: (selected) => {
+                    const selectedId = String(selected ?? "");
+                    if (!selectedId) return "請選擇播放清單";
+                    const selectedOption = youtubePlaylists.find(
+                      (item) => item.id === selectedId,
+                    );
+                    if (!selectedOption) return selectedId;
+                    return `${selectedOption.title} (${selectedOption.itemCount})`;
+                  },
+                }}
               >
                 <MenuItem value="">選擇播放清單</MenuItem>
                 {youtubePlaylists.map((playlist) => (
@@ -579,7 +692,7 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
   const lastRequestedScopeRef = useRef<"public" | "owner" | null>(null);
   const lastFetchedScopeRef = useRef<"public" | "owner" | null>(null);
   const lastRequestedYoutubeRef = useRef(false);
-  const hasFetchedYoutubeRef = useRef(false);
+  const hasAttemptedYoutubeFetchRef = useRef(false);
   const [selectedYoutubePlaylistId, setSelectedYoutubePlaylistId] = useState<
     string | null
   >(null);
@@ -627,6 +740,58 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
     }
     return `載入成功，共 ${playlistItemsForChange.length} 首`;
   })();
+  const hostPlaylistPrimaryText =
+    "目前為貼上連結模式，請貼上 YouTube 播放清單連結";
+  const isHostCollectionEmptyNotice =
+    hostSourceType === "collection" &&
+    !collectionsLoading &&
+    collections.length === 0 &&
+    !(collectionScope === "owner" && !isGoogleAuthed);
+  const hostCollectionPrimaryText = (() => {
+    const scopeLabel = collectionScope === "public" ? "公開" : "私人";
+    if (collectionScope === "owner" && !isGoogleAuthed) {
+      return "目前為私人收藏庫，請先登入後再選擇收藏庫";
+    }
+    if (collectionsLoading) {
+      return `目前為${scopeLabel}收藏庫，正在讀取收藏庫清單`;
+    }
+    if (collections.length === 0) {
+      return `目前為${scopeLabel}收藏庫，請先建立後再選擇`;
+    }
+    return `目前為${scopeLabel}收藏庫，請選擇收藏庫`;
+  })();
+  const isHostYoutubeEmptyNotice =
+    hostSourceType === "youtube" &&
+    isGoogleAuthed &&
+    !youtubePlaylistsLoading &&
+    youtubePlaylists.length === 0 &&
+    !youtubePlaylistsError;
+  const isHostYoutubeMissingNotice =
+    hostSourceType === "youtube" &&
+    Boolean(
+      youtubePlaylistsError &&
+        (youtubePlaylistsError.includes("尚未建立 YouTube 頻道") ||
+          youtubePlaylistsError.includes("沒有播放清單")),
+    );
+  const visibleHostYoutubeError =
+    youtubePlaylistsError && !isHostYoutubeMissingNotice
+      ? youtubePlaylistsError
+      : null;
+  const hostYoutubePrimaryText = (() => {
+    if (!isGoogleAuthed) {
+      return "目前為我的播放清單，請先登入後再選擇播放清單";
+    }
+    if (youtubePlaylistsLoading) {
+      return "目前為我的播放清單，正在讀取播放清單";
+    }
+    if (isHostYoutubeMissingNotice) {
+      return "目前為我的播放清單，尚未建立 YouTube 頻道或沒有播放清單";
+    }
+    if (youtubePlaylists.length === 0 && !youtubePlaylistsError) {
+      return "目前為我的播放清單，尚未建立播放清單，請先建立後再選擇";
+    }
+    return "目前為我的播放清單，請選擇播放清單";
+  })();
   const questionMaxLimit = getQuestionMax(
     currentRoom?.playlist.totalCount ?? 0,
   );
@@ -661,6 +826,12 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
   const isCollectionsEmptyNotice =
     collectionsError === "尚未建立收藏庫" ||
     collectionsError === "尚未建立公開收藏庫";
+  const visibleCollectionsError = React.useMemo(() => {
+    if (!collectionsError || isCollectionsEmptyNotice) {
+      return null;
+    }
+    return collectionsError;
+  }, [collectionsError, isCollectionsEmptyNotice]);
 
   useEffect(() => {
     if (collectionsLoading) return;
@@ -693,24 +864,27 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
   useEffect(() => {
     if (youtubePlaylistsLoading) return;
     if (!lastRequestedYoutubeRef.current) return;
-    if (!youtubePlaylistsError) {
-      hasFetchedYoutubeRef.current = true;
-    }
-  }, [youtubePlaylistsError, youtubePlaylistsLoading]);
+    hasAttemptedYoutubeFetchRef.current = true;
+  }, [youtubePlaylistsLoading]);
 
   const shouldFetchYoutube = React.useCallback(() => {
-    if (youtubePlaylistsLoading) return false;
-    if (youtubePlaylistsError) return true;
-    if (!hasFetchedYoutubeRef.current) return true;
-    return false;
-  }, [youtubePlaylistsError, youtubePlaylistsLoading]);
+    if (!isGoogleAuthed || youtubePlaylistsLoading) return false;
+    return !hasAttemptedYoutubeFetchRef.current;
+  }, [isGoogleAuthed, youtubePlaylistsLoading]);
 
-  const requestYoutubePlaylists = React.useCallback(() => {
+  const requestYoutubePlaylists = React.useCallback((force = false) => {
     if (!isGoogleAuthed) return;
-    if (!shouldFetchYoutube()) return;
+    if (!force && !shouldFetchYoutube()) return;
     lastRequestedYoutubeRef.current = true;
+    hasAttemptedYoutubeFetchRef.current = true;
     onFetchYoutubePlaylists();
   }, [isGoogleAuthed, onFetchYoutubePlaylists, shouldFetchYoutube]);
+
+  useEffect(() => {
+    if (isGoogleAuthed) return;
+    lastRequestedYoutubeRef.current = false;
+    hasAttemptedYoutubeFetchRef.current = false;
+  }, [isGoogleAuthed]);
 
   useEffect(() => {
     if (hostSourceType !== "collection") return;
@@ -1243,33 +1417,120 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                   <Typography variant="subtitle2" className="text-slate-200">
                     來源選擇
                   </Typography>
-                  <Stack spacing={1} mt={1}>
-                    <TextField
-                      select
-                      size="small"
-                      value={hostSourceType}
-                      onChange={(e) => {
-                        const next = e.target.value as
-                          | "suggestions"
-                          | "playlist"
-                          | "collection"
-                          | "youtube";
-                        if (
-                          hostPanelExpanded &&
-                          (next === "suggestions" ||
-                            hostSourceType === "suggestions")
-                        ) {
-                          markSuggestionsSeen();
+                  <Stack
+                    spacing={1}
+                    mt={1}
+                    className={`room-lobby-source-panel ${
+                      hostSourceType === "suggestions"
+                        ? "room-lobby-source-panel-suggestions"
+                        : "room-lobby-source-panel-fixed"
+                    }`}
+                  >
+                    <Stack direction="row" className="room-lobby-mode-row">
+                      <Button
+                        size="small"
+                        variant={
+                          hostSourceType === "suggestions"
+                            ? "contained"
+                            : "outlined"
                         }
-                        setHostSourceType(next);
-                      }}
-                      fullWidth
-                    >
-                      <MenuItem value="suggestions">推薦清單</MenuItem>
-                      <MenuItem value="playlist">貼上播放清單 URL</MenuItem>
-                      <MenuItem value="collection">收藏庫</MenuItem>
-                      <MenuItem value="youtube">我的播放清單</MenuItem>
-                    </TextField>
+                        className="room-lobby-mode-button"
+                        onClick={() => {
+                          if (
+                            hostPanelExpanded &&
+                            hostSourceType !== "suggestions"
+                          ) {
+                            markSuggestionsSeen();
+                          }
+                          setHostSourceType("suggestions");
+                        }}
+                      >
+                        推薦清單
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={
+                          hostSourceType === "playlist" ? "contained" : "outlined"
+                        }
+                        className="room-lobby-mode-button"
+                        onClick={() => {
+                          if (
+                            hostPanelExpanded &&
+                            hostSourceType === "suggestions"
+                          ) {
+                            markSuggestionsSeen();
+                          }
+                          setHostSourceType("playlist");
+                        }}
+                      >
+                        貼上連結
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={
+                          hostSourceType === "collection" &&
+                          collectionScope === "public"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        className="room-lobby-mode-button"
+                        onClick={() => {
+                          if (
+                            hostPanelExpanded &&
+                            hostSourceType === "suggestions"
+                          ) {
+                            markSuggestionsSeen();
+                          }
+                          setHostSourceType("collection");
+                          setCollectionScope("public");
+                          onSelectCollection(null);
+                        }}
+                      >
+                        公開收藏庫
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={
+                          hostSourceType === "collection" &&
+                          collectionScope === "owner"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        className="room-lobby-mode-button"
+                        onClick={() => {
+                          if (
+                            hostPanelExpanded &&
+                            hostSourceType === "suggestions"
+                          ) {
+                            markSuggestionsSeen();
+                          }
+                          setHostSourceType("collection");
+                          setCollectionScope("owner");
+                          onSelectCollection(null);
+                        }}
+                        disabled={!isGoogleAuthed}
+                      >
+                        私人收藏庫
+                      </Button>
+                      <Button
+                        size="small"
+                        variant={
+                          hostSourceType === "youtube" ? "contained" : "outlined"
+                        }
+                        className="room-lobby-mode-button"
+                        onClick={() => {
+                          if (
+                            hostPanelExpanded &&
+                            hostSourceType === "suggestions"
+                          ) {
+                            markSuggestionsSeen();
+                          }
+                          setHostSourceType("youtube");
+                        }}
+                      >
+                        我的播放清單
+                      </Button>
+                    </Stack>
 
                     {hostSourceType === "suggestions" && (
                       <>
@@ -1374,6 +1635,9 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
 
                     {hostSourceType === "playlist" && (
                       <>
+                        <Typography variant="caption" className="text-slate-400">
+                          {hostPlaylistPrimaryText}
+                        </Typography>
                         <TextField
                           size="small"
                           value={playlistUrl}
@@ -1419,45 +1683,22 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
 
                     {hostSourceType === "collection" && (
                       <>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Button
-                            size="small"
-                            variant={
-                              collectionScope === "public"
-                                ? "contained"
-                                : "outlined"
-                            }
-                            onClick={() => {
-                              setCollectionScope("public");
-                              onSelectCollection(null);
-                            }}
+                        <Typography
+                          variant="caption"
+                          className={
+                            isHostCollectionEmptyNotice ? "text-rose-300" : "text-slate-400"
+                          }
+                        >
+                          {hostCollectionPrimaryText}
+                        </Typography>
+                        {!isGoogleAuthed && collectionScope === "owner" && (
+                          <Typography
+                            variant="caption"
+                            className="text-slate-400"
                           >
-                            公開收藏庫
-                          </Button>
-                          <Button
-                            size="small"
-                            variant={
-                              collectionScope === "owner"
-                                ? "contained"
-                                : "outlined"
-                            }
-                            onClick={() => {
-                              setCollectionScope("owner");
-                              onSelectCollection(null);
-                            }}
-                            disabled={!isGoogleAuthed}
-                          >
-                            私人收藏庫
-                          </Button>
-                          {!isGoogleAuthed && (
-                            <Typography
-                              variant="caption"
-                              className="text-slate-400"
-                            >
-                              登入後可使用私人收藏庫
-                            </Typography>
-                          )}
-                        </Stack>
+                            登入後可使用私人收藏庫
+                          </Typography>
+                        )}
                         <TextField
                           select
                           size="small"
@@ -1486,6 +1727,20 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                           }
                           fullWidth
                           placeholder="選擇收藏庫"
+                          SelectProps={{
+                            displayEmpty: true,
+                            renderValue: (selected) => {
+                              const selectedId = String(selected ?? "");
+                              if (!selectedId) return "請選擇收藏庫";
+                              const selectedOption = collections.find(
+                                (item) => item.id === selectedId,
+                              );
+                              if (!selectedOption) return selectedId;
+                              return `${selectedOption.title} · ${resolveVisibilityLabel(
+                                selectedOption.visibility,
+                              )}`;
+                            },
+                          }}
                         >
                           <MenuItem value="">選擇收藏庫</MenuItem>
                           {collections.map((collection) => (
@@ -1514,9 +1769,9 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                             </MenuItem>
                           ))}
                         </TextField>
-                        {collectionsError && (
+                        {visibleCollectionsError && (
                           <Typography variant="caption" className="text-rose-300">
-                            {collectionsError}
+                            {visibleCollectionsError}
                           </Typography>
                         )}
                         {collectionItemsError && (
@@ -1529,24 +1784,19 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
 
                     {hostSourceType === "youtube" && (
                       <>
-                        {youtubePlaylistsLoading && (
-                          <Typography variant="caption" className="text-slate-400">
-                            讀取中...
-                          </Typography>
-                        )}
-                        {!youtubePlaylistsLoading &&
-                          youtubePlaylists.length === 0 &&
-                          !youtubePlaylistsError && (
-                            <Typography
-                              variant="caption"
-                              className="text-slate-400"
-                            >
-                              尚未載入播放清單
-                            </Typography>
-                          )}
-                        {youtubePlaylistsError && (
+                        <Typography
+                          variant="caption"
+                          className={
+                            isHostYoutubeEmptyNotice || isHostYoutubeMissingNotice
+                              ? "text-rose-300"
+                              : "text-slate-400"
+                          }
+                        >
+                          {hostYoutubePrimaryText}
+                        </Typography>
+                        {visibleHostYoutubeError && (
                           <Typography variant="caption" className="text-rose-300">
-                            {youtubePlaylistsError}
+                            {visibleHostYoutubeError}
                           </Typography>
                         )}
                         <TextField
@@ -1570,7 +1820,20 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
                               void onImportYoutubePlaylist(nextId);
                             });
                           }}
+                          disabled={youtubePlaylistsLoading || !isGoogleAuthed}
                           fullWidth
+                          SelectProps={{
+                            displayEmpty: true,
+                            renderValue: (selected) => {
+                              const selectedId = String(selected ?? "");
+                              if (!selectedId) return "請選擇播放清單";
+                              const selectedOption = youtubePlaylists.find(
+                                (item) => item.id === selectedId,
+                              );
+                              if (!selectedOption) return selectedId;
+                              return `${selectedOption.title} (${selectedOption.itemCount})`;
+                            },
+                          }}
                         >
                           <MenuItem value="">選擇播放清單</MenuItem>
                           {youtubePlaylists.map((playlist) => (
@@ -1617,12 +1880,13 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
             collectionScope={collectionScope}
             onCollectionScopeChange={setCollectionScope}
             collections={collections}
+            collectionsLoading={collectionsLoading}
             isGoogleAuthed={isGoogleAuthed}
             youtubePlaylists={youtubePlaylists}
             youtubePlaylistsLoading={youtubePlaylistsLoading}
             youtubePlaylistsError={youtubePlaylistsError}
             requestCollections={requestCollections}
-            requestYoutubePlaylists={onFetchYoutubePlaylists}
+            requestYoutubePlaylists={requestYoutubePlaylists}
             onSuggestPlaylist={onSuggestPlaylist}
             extractPlaylistId={extractPlaylistId}
             resolveVisibilityLabel={resolveVisibilityLabel}

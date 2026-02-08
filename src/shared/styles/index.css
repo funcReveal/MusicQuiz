@@ -295,6 +295,241 @@ body {
   color: #e2e8f0;
 }
 
+.room-create-source-switch {
+  flex-wrap: wrap;
+}
+
+.room-create-source-status {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  padding-left: 2px;
+}
+
+.room-create-source-status .MuiTypography-root {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-create-status-info {
+  color: #93c5fd;
+}
+
+.room-create-status-error {
+  color: #fca5a5;
+}
+
+.room-create-source-content {
+  min-height: 0;
+  padding-top: 4px;
+}
+
+.room-create-loading-button.MuiButton-root {
+  min-width: 124px;
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(148, 163, 184, 0.38);
+  box-shadow: 0 12px 22px -16px rgba(56, 189, 248, 0.55);
+}
+
+.room-create-loading-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.room-create-loading-button.MuiButton-root::before {
+  content: "";
+  position: absolute;
+  inset: -35% auto -35% -35%;
+  width: 48%;
+  background: linear-gradient(
+    110deg,
+    rgba(125, 211, 252, 0),
+    rgba(125, 211, 252, 0.34),
+    rgba(125, 211, 252, 0)
+  );
+  transform: translateX(-120%) skewX(-18deg);
+  animation: room-create-sweep 1.4s ease-in-out infinite;
+}
+
+.room-create-loading-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+}
+
+.room-create-loading-eq > span {
+  width: 3px;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.9);
+  transform-origin: bottom center;
+  animation: room-create-eq 0.9s ease-in-out infinite;
+}
+
+.room-create-loading-eq > span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.room-create-loading-eq > span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.room-create-loading-text {
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.room-create-collection-wrap {
+  gap: 8px;
+}
+
+.room-create-mine-wrap {
+  gap: 8px;
+}
+
+.room-create-mine-row {
+  align-items: stretch;
+}
+
+.room-create-mine-select {
+  min-height: 40px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.room-create-mine-select:focus {
+  outline: none;
+  border-color: rgba(245, 158, 11, 0.72);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+}
+
+.room-create-mine-select:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.room-create-mine-import-button.MuiButton-root {
+  min-width: 124px;
+  white-space: nowrap;
+}
+
+.room-create-mine-actions {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.room-create-collection-row {
+  align-items: stretch;
+}
+
+.room-create-collection-select {
+  min-height: 40px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.room-create-collection-select:focus {
+  outline: none;
+  border-color: rgba(245, 158, 11, 0.72);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+}
+
+.room-create-collection-select:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.room-create-collection-load-button.MuiButton-root {
+  min-width: 124px;
+  white-space: nowrap;
+}
+
+.room-create-progress-slot {
+  min-height: 4px;
+}
+
+.room-create-progress-slot .MuiLinearProgress-root {
+  border-radius: 999px;
+  transition: opacity 180ms ease;
+}
+
+.room-lobby-source-panel {
+  gap: 10px;
+}
+
+.room-lobby-source-panel-fixed {
+  min-height: 260px;
+}
+
+.room-lobby-scope-row {
+  flex-wrap: wrap;
+}
+
+.room-lobby-mode-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.room-lobby-mode-row::-webkit-scrollbar {
+  display: none;
+}
+
+.room-lobby-mode-button.MuiButton-root {
+  white-space: nowrap;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.room-lobby-status-slot {
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.room-lobby-select-slot .MuiInputBase-root {
+  min-height: 40px;
+}
+
+.room-lobby-load-notice {
+  min-height: 18px;
+  display: block;
+}
+
+.room-lobby-apply-button.MuiButton-root {
+  min-width: 112px;
+  align-self: flex-start;
+}
+
+@keyframes room-create-eq {
+  0%,
+  100% {
+    transform: scaleY(0.34);
+    opacity: 0.65;
+  }
+
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes room-create-sweep {
+  to {
+    transform: translateX(310%) skewX(-18deg);
+  }
+}
+
 .room-create-track {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -353,6 +588,18 @@ body {
 
   .room-create-header {
     flex-direction: column;
+  }
+
+  .room-create-source-switch .MuiButton-root {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .room-create-source-content {
+    min-height: unset;
+  }
+
+  .room-lobby-source-panel-fixed {
+    min-height: unset;
   }
 }
 

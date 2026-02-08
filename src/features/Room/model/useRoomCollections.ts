@@ -193,19 +193,23 @@ export const useRoomCollections = ({
             const rawTitle =
               item.title ?? item.answer_text ?? `歌曲 ${index + 1}`;
             const answerText = item.answer_text ?? rawTitle;
+            const resolvedUrl = videoId
+              ? videoUrlFromId(videoId)
+              : sourceId.startsWith("http")
+                ? sourceId
+                : "";
             return {
               title: rawTitle,
               answerText,
-              url: videoId
-                ? videoUrlFromId(videoId)
-                : sourceId.startsWith("http")
-                  ? sourceId
-                  : "",
+              url: resolvedUrl,
               thumbnail: videoId ? thumbnailFromId(videoId) : undefined,
               uploader: item.channel_title ?? undefined,
               duration: durationValue,
               startSec,
               endSec: safeEnd,
+              ...(videoId ? { videoId } : {}),
+              sourceId: collectionId,
+              provider: "collection",
             };
           });
 

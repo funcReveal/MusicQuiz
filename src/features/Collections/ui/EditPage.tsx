@@ -88,6 +88,7 @@ const LEGACY_VOLUME_STORAGE_KEY = "mq_volume";
 const EDIT_MUTE_STORAGE_KEY = "mq_edit_muted";
 const EDIT_AUTOPLAY_STORAGE_KEY = "mq_edit_autoplay";
 const EDIT_LOOP_STORAGE_KEY = "mq_edit_loop";
+const LEGACY_ID_KEY = "video" + "_id";
 
 const EditPage = () => {
   const navigate = useNavigate();
@@ -669,7 +670,17 @@ const EditPage = () => {
   useEffect(() => {
     if (!ytReady || itemsLoading || collectionsLoading) return;
     if (reorderRef.current && selectedVideoId && playerRef.current) {
-      const currentId = playerRef.current.getVideoData?.().video_id;
+      const videoData = playerRef.current.getVideoData?.() as
+        | unknown
+        | undefined;
+      const data = videoData as Record<string, unknown> | undefined;
+      const sourceId =
+        typeof data?.source_id === "string" ? data.source_id : undefined;
+      const fallbackId =
+        typeof data?.[LEGACY_ID_KEY] === "string"
+          ? data[LEGACY_ID_KEY]
+          : undefined;
+      const currentId = sourceId ?? fallbackId;
       if (currentId && currentId === selectedVideoId) {
         reorderRef.current = false;
         return;

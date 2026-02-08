@@ -31,6 +31,8 @@ interface HeaderSectionProps {
   onLogin?: () => void;
   onLogout?: () => void;
   onEditProfile?: () => void;
+  onNavigateRooms?: () => void;
+  onNavigateCollections?: () => void;
 }
 
 const HeaderSection: React.FC<HeaderSectionProps> = ({
@@ -40,6 +42,8 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
   onLogin,
   onLogout,
   onEditProfile,
+  onNavigateRooms,
+  onNavigateCollections,
 }) => {
   const navigate = useNavigate();
   const authLabel =
@@ -287,6 +291,10 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
             <MenuItem
               onClick={() => {
                 handleMenuClose();
+                if (onNavigateRooms) {
+                  onNavigateRooms();
+                  return;
+                }
                 navigate("/rooms");
               }}
               sx={menuItemSx}
@@ -300,6 +308,10 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
               <MenuItem
                 onClick={() => {
                   handleMenuClose();
+                  if (onNavigateCollections) {
+                    onNavigateCollections();
+                    return;
+                  }
                   navigate("/collections");
                 }}
                 sx={menuItemSx}

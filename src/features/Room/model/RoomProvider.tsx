@@ -78,7 +78,7 @@ const mapCollectionItemsToPlaylist = (
         ? item.end_sec
         : startSec + DEFAULT_CLIP_SEC;
     const safeEnd = Math.max(startSec + 1, endSec);
-    const videoId = item.video_id ?? "";
+    const videoId = item.source_id?.trim() ?? "";
     if (!videoId) return [];
     const durationValue =
       typeof item.duration_sec === "number" && item.duration_sec > 0
@@ -123,6 +123,11 @@ const extractVideoIdFromUrl = (url: string) => {
       return match?.[1] ?? null;
     }
   }
+};
+
+const formatAckError = (prefix: string, error?: string) => {
+  const detail = error?.trim();
+  return `${prefix}：${detail || "未知錯誤"}`;
 };
 
 export const RoomProvider: React.FC<{ children: ReactNode }> = ({
@@ -311,10 +316,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           }
           const normalized = normalizePlaylistItems(
             data.items.map((item) => {
-              const videoId = item.videoId ?? extractVideoIdFromUrl(item.url);
+              const resolvedVideoId =
+                item.videoId ?? extractVideoIdFromUrl(item.url);
               return {
                 ...item,
-                videoId,
+                ...(resolvedVideoId ? { videoId: resolvedVideoId } : {}),
                 sourceId: data.playlistId ?? playlistId,
                 provider: "youtube",
               };
@@ -369,10 +375,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       }
       const normalized = normalizePlaylistItems(
         data.items.map((item) => {
-          const videoId = item.videoId ?? extractVideoIdFromUrl(item.url);
+          const resolvedVideoId =
+            item.videoId ?? extractVideoIdFromUrl(item.url);
           return {
             ...item,
-            videoId,
+            ...(resolvedVideoId ? { videoId: resolvedVideoId } : {}),
             sourceId: data.playlistId ?? playlistId,
             provider: "youtube",
           };
@@ -775,6 +782,9 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
                 setStatusText(`恢復房間：${state.room.name}`);
                 setRouteRoomResolved(true);
               } else {
+                if (ack?.error) {
+                  setStatusText(formatAckError("恢復房間失敗", ack.error));
+                }
                 persistRoomId(null);
                 resetSessionClientId();
                 setRouteRoomResolved(true);
@@ -1045,7 +1055,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           }
         }
       } else {
-        setStatusText(`建立房間失敗：{ack.error}`);
+        setStatusText(formatAckError("建立房間失敗", ack.error));
       }
     });
   }, [
@@ -1109,7 +1119,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           setJoinPasswordInput("");
           setStatusText(`已加入房間：${state.room.name}`);
         } else {
-          setStatusText(`加入房間失敗：{ack.error}`);
+          setStatusText(formatAckError("加入房間失敗", ack.error));
         }
       },
     );
@@ -1147,7 +1157,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         setStatusText("已離開房間");
         onLeft?.();
       } else {
-        setStatusText(`離開房間失敗：{ack.error}`);
+        setStatusText(formatAckError("離開房間失敗", ack.error));
       }
     });
   }, [currentRoom, getSocket, persistRoomId, resetSessionClientId]);
@@ -1164,7 +1174,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     s.emit("sendMessage", { content: trimmed }, (ack) => {
       if (!ack) return;
       if (!ack.ok) {
-        setStatusText(`訊息送出失敗：{ack.error}`);
+        setStatusText(formatAckError("訊息送出失敗", ack.error));
       }
     });
 
@@ -1194,7 +1204,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           void fetchCompletePlaylist(currentRoom.id).then(setGamePlaylist);
           setStatusText("遊戲即將開始");
         } else {
-          setStatusText(`開始遊戲失敗：{ack.error}`);
+          setStatusText(formatAckError("開始遊戲失敗", ack.error));
         }
       },
     );
@@ -1219,7 +1229,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     if (gameState.phase !== "guess") return;
     s.emit("submitAnswer", { roomId: currentRoom.id, choiceIndex }, (ack) => {
       if (ack && !ack.ok) {
-        setStatusText(`提交答案失敗：{ack.error}`);
+        setStatusText(formatAckError("提交答案失敗", ack.error));
       }
     });
   }, [currentRoom, gameState, getSocket]);
@@ -1247,7 +1257,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
               return;
             }
             if (!ack.ok) {
-              setStatusText(`更新房間設定失敗：{ack.error}`);
+              setStatusText(formatAckError("更新房間設定失敗", ack.error));
               resolve(false);
               return;
             }
@@ -1279,7 +1289,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         (ack: Ack<null>) => {
           if (!ack) return;
           if (!ack.ok) {
-            setStatusText(`踢出失敗：{ack.error}`);
+            setStatusText(formatAckError("踢出失敗", ack.error));
           }
         },
       );
@@ -1297,7 +1307,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         (ack: Ack<{ hostClientId: string }>) => {
           if (!ack) return;
           if (!ack.ok) {
-            setStatusText(`轉移房主失敗：{ack.error}`);
+            setStatusText(formatAckError("轉移房主失敗", ack.error));
           }
         },
       );
@@ -1388,7 +1398,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
               return;
             }
             if (!ack.ok) {
-              const message = `推薦失敗：${ack.error}`;
+              const message = formatAckError("推薦失敗", ack.error);
               setStatusText(message);
               resolve({ ok: false, error: message });
               return;
@@ -1460,7 +1470,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       async (ack: Ack<{ receivedCount: number; totalCount: number; ready: boolean }>) => {
         if (!ack) return;
         if (!ack.ok) {
-          setStatusText(`切換歌單失敗：{ack.error}`);
+          setStatusText(formatAckError("切換歌單失敗", ack.error));
           return;
         }
         if (remaining.length > 0) {
@@ -1536,7 +1546,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
           async (ack: Ack<{ receivedCount: number; totalCount: number; ready: boolean }>) => {
             if (!ack) return;
             if (!ack.ok) {
-              setStatusText(`切換歌單失敗：${ack.error}`);
+              setStatusText(formatAckError("切換歌單失敗", ack.error));
               return;
             }
             applyPlaylistSource(
