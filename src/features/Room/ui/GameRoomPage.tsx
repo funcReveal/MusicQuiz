@@ -94,6 +94,24 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     const parsed = Number(stored);
     return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 50;
   });
+  const requiresAudioGesture = useMemo(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") {
+      return false;
+    }
+    const legacyNavigator = navigator as Navigator & {
+      msMaxTouchPoints?: number;
+    };
+    const isTouchDevice =
+      navigator.maxTouchPoints > 0 || (legacyNavigator.msMaxTouchPoints ?? 0) > 0;
+    const hasCoarsePointer =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    const ua = navigator.userAgent || "";
+    const isMobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+    return (isTouchDevice || hasCoarsePointer) && isMobileUa;
+  }, []);
+  const [audioUnlocked, setAudioUnlocked] = useState(() => !requiresAudioGesture);
+  const audioUnlockedRef = useRef(!requiresAudioGesture);
   const [nowMs, setNowMs] = useState(() => Date.now() + serverOffsetMs);
   const playerStartRef = useRef(0);
   const [showVideoOverride, setShowVideoOverride] = useState<boolean | null>(
@@ -144,6 +162,11 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     () => Date.now() + serverOffsetMs,
     [serverOffsetMs],
   );
+  const markAudioUnlocked = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    setAudioUnlocked(true);
+  }, []);
   useEffect(() => {
     lastSyncMsRef.current = Date.now() + serverOffsetMs;
   }, [serverOffsetMs]);
@@ -386,6 +409,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
 
   const startPlayback = useCallback(
     (forcedPosition?: number, forceSeek = false) => {
+      if (requiresAudioGesture && !audioUnlockedRef.current) return;
       const serverNowMs = getServerNowMs();
       if (serverNowMs < gameState.startedAt) return;
       const rawStartPos = forcedPosition ?? getDesiredPositionSec();
@@ -418,10 +442,25 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       getServerNowMs,
       gameState.startedAt,
       postCommand,
+      requiresAudioGesture,
       startSilentAudio,
       volume,
     ],
   );
+  const unlockAudioAndStart = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    markAudioUnlocked();
+    startSilentAudio();
+    if (playerReadyRef.current && getServerNowMs() >= gameState.startedAt) {
+      startPlayback();
+    }
+  }, [
+    gameState.startedAt,
+    getServerNowMs,
+    markAudioUnlocked,
+    startPlayback,
+    startSilentAudio,
+  ]);
 
   const syncToServerPosition = useCallback(
     (
@@ -678,6 +717,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         lastPlayerStateRef.current =
           typeof data.info === "number" ? data.info : null;
         if (data.info === 1) {
+          markAudioUnlocked();
           hasStartedPlaybackRef.current = true;
           lastSyncMsRef.current = getServerNowMs();
           setLoadedTrackKey(trackLoadKey);
@@ -757,6 +797,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     trackLoadKey,
     videoId,
     waitingToStart,
+    markAudioUnlocked,
     scheduleResumeResync,
   ]);
 
@@ -1188,6 +1229,27 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                 className="hidden"
                 aria-hidden="true"
               />
+              {requiresAudioGesture && !audioUnlocked && (
+                <div
+                  className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm"
+                  onPointerDown={unlockAudioAndStart}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="點擊後開始播放"
+                >
+                  <div className="mx-4 w-full max-w-sm rounded-2xl border border-emerald-300/40 bg-slate-900/85 px-6 py-6 text-center shadow-[0_20px_60px_rgba(2,6,23,0.6)]">
+                    <button
+                      type="button"
+                      className="rounded-full border border-emerald-300/60 bg-emerald-400/15 px-5 py-2 text-base font-semibold text-emerald-100"
+                    >
+                      點擊後開始播放
+                    </button>
+                    <p className="mt-3 text-xs text-slate-300">
+                      手機瀏覽器需要先手勢觸發，音樂才能播放
+                    </p>
+                  </div>
+                </div>
+              )}
               {gameState.phase === "guess" && !isEnded && (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95">
                   {isInitialCountdown ? (
