@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type { PlaylistItem } from "./types";
 import {
@@ -14,6 +14,8 @@ import {
 } from "./roomUtils";
 import { DEFAULT_CLIP_SEC, DEFAULT_PAGE_SIZE } from "./roomConstants";
 import { ensureFreshAuthToken } from "../../../shared/auth/token";
+
+const EMPTY_COLLECTION_RETRY_LIMIT = 2;
 
 type UseRoomCollectionsOptions = {
   workerUrl?: string;
@@ -34,6 +36,8 @@ export type UseRoomCollectionsResult = {
   }>;
   collectionsLoading: boolean;
   collectionsError: string | null;
+  collectionScope: "owner" | "public" | null;
+  collectionsLastFetchedAt: number | null;
   selectedCollectionId: string | null;
   collectionItemsLoading: boolean;
   collectionItemsError: string | null;
@@ -41,7 +45,7 @@ export type UseRoomCollectionsResult = {
   fetchCollections: (scope?: "owner" | "public") => Promise<void>;
   loadCollectionItems: (
     collectionId: string,
-    options?: { readToken?: string | null },
+    options?: { readToken?: string | null; force?: boolean },
   ) => Promise<void>;
   resetCollectionsState: () => void;
   resetCollectionSelection: () => void;
@@ -74,6 +78,17 @@ export const useRoomCollections = ({
   const [collectionItemsError, setCollectionItemsError] = useState<
     string | null
   >(null);
+  const [collectionScope, setCollectionScope] = useState<
+    "owner" | "public" | null
+  >(null);
+  const [collectionsLastFetchedAt, setCollectionsLastFetchedAt] = useState<
+    number | null
+  >(null);
+  const collectionCacheRef = useRef<Record<string, PlaylistItem[]>>({});
+  const inFlightCollectionIdRef = useRef<string | null>(null);
+  const latestLoadRequestIdRef = useRef(0);
+  const emptyCollectionRetryCountRef = useRef<Record<string, number>>({});
+  const pausedEmptyCollectionRef = useRef<Record<string, boolean>>({});
 
   const selectCollection = useCallback((collectionId: string | null) => {
     setSelectedCollectionId(collectionId);
@@ -88,6 +103,7 @@ export const useRoomCollections = ({
       }
       const resolvedScope =
         scope ?? (authToken && ownerId ? "owner" : "public");
+      setCollectionScope(resolvedScope);
       if (resolvedScope === "owner") {
         if (!authToken) {
           setCollectionsError("請先登入後再使用個人收藏庫");
@@ -101,6 +117,28 @@ export const useRoomCollections = ({
       setCollectionsLoading(true);
       setCollectionsError(null);
       try {
+        const applyCollectionsResult = (
+          items: Array<{
+            id: string;
+            title: string;
+            description?: string | null;
+            visibility?: "private" | "public";
+          }>,
+          emptyMessage: string,
+        ) => {
+          setCollections(items);
+          setCollectionsLastFetchedAt(Date.now());
+          setSelectedCollectionId((currentSelection) =>
+            currentSelection &&
+            items.some((item) => item.id === currentSelection)
+              ? currentSelection
+              : null,
+          );
+          if (items.length === 0) {
+            setCollectionsError(emptyMessage);
+          }
+        };
+
         if (resolvedScope === "public") {
           const { ok, payload } = await apiFetchCollections(workerUrl, {
             visibility: "public",
@@ -110,10 +148,7 @@ export const useRoomCollections = ({
             throw new Error(payload?.error ?? "載入公開收藏庫失敗");
           }
           const items = payload?.data?.items ?? [];
-          setCollections(items);
-          if (items.length === 0) {
-            setCollectionsError("尚未建立公開收藏庫");
-          }
+          applyCollectionsResult(items, "尚未建立公開收藏庫");
           return;
         }
 
@@ -132,10 +167,7 @@ export const useRoomCollections = ({
           });
           if (ok) {
             const items = payload?.data?.items ?? [];
-            setCollections(items);
-            if (items.length === 0) {
-              setCollectionsError("尚未建立收藏庫");
-            }
+            applyCollectionsResult(items, "尚未建立收藏庫");
             return;
           }
           if (status === 401 && allowRetry) {
@@ -161,7 +193,10 @@ export const useRoomCollections = ({
   );
 
   const loadCollectionItems = useCallback(
-    async (collectionId: string, options?: { readToken?: string | null }) => {
+    async (
+      collectionId: string,
+      options?: { readToken?: string | null; force?: boolean },
+    ) => {
       if (!workerUrl) {
         setCollectionItemsError("尚未設定收藏庫 API 位置 (WORKER_API_URL)");
         return;
@@ -170,6 +205,28 @@ export const useRoomCollections = ({
         setCollectionItemsError("請先選擇收藏庫");
         return;
       }
+      if (!options?.force && pausedEmptyCollectionRef.current[collectionId]) {
+        const message = "此收藏庫目前沒有歌曲，請先建立內容後再試";
+        setCollectionItemsError(message);
+        setStatusText(message);
+        return;
+      }
+      if (inFlightCollectionIdRef.current === collectionId) {
+        return;
+      }
+      if (!options?.force) {
+        const cachedItems = collectionCacheRef.current[collectionId];
+        if (cachedItems && cachedItems.length > 0) {
+          onPlaylistReset();
+          setCollectionItemsError(null);
+          setSelectedCollectionId(collectionId);
+          onPlaylistLoaded(cachedItems, collectionId);
+          setStatusText(`已套用收藏庫，共 ${cachedItems.length} 首`);
+          return;
+        }
+      }
+      const requestId = ++latestLoadRequestIdRef.current;
+      inFlightCollectionIdRef.current = collectionId;
       setCollectionItemsLoading(true);
       setCollectionItemsError(null);
       onPlaylistReset();
@@ -214,10 +271,25 @@ export const useRoomCollections = ({
           });
 
         const handleSuccess = (items: WorkerCollectionItem[]) => {
+          if (requestId !== latestLoadRequestIdRef.current) {
+            return;
+          }
           if (items.length === 0) {
-            throw new Error("收藏庫內沒有歌曲");
+            const retries =
+              (emptyCollectionRetryCountRef.current[collectionId] ?? 0) + 1;
+            emptyCollectionRetryCountRef.current[collectionId] = retries;
+            if (retries >= EMPTY_COLLECTION_RETRY_LIMIT) {
+              pausedEmptyCollectionRef.current[collectionId] = true;
+              throw new Error("此收藏庫目前沒有歌曲，請先建立內容後再試");
+            }
+            throw new Error(
+              `此收藏庫目前沒有歌曲，請先建立內容後再試（${retries}/${EMPTY_COLLECTION_RETRY_LIMIT}）`,
+            );
           }
           const normalizedItems = normalizePlaylistItems(mapItems(items));
+          delete emptyCollectionRetryCountRef.current[collectionId];
+          delete pausedEmptyCollectionRef.current[collectionId];
+          collectionCacheRef.current[collectionId] = normalizedItems;
           onPlaylistLoaded(normalizedItems, collectionId);
           setStatusText(`已載入收藏庫，共 ${normalizedItems.length} 首`);
         };
@@ -265,12 +337,20 @@ export const useRoomCollections = ({
           await run(token, true);
         }
       } catch (error) {
+        if (requestId !== latestLoadRequestIdRef.current) {
+          return;
+        }
         setCollectionItemsError(
           error instanceof Error ? error.message : "載入收藏庫失敗",
         );
         onPlaylistReset();
       } finally {
-        setCollectionItemsLoading(false);
+        if (requestId === latestLoadRequestIdRef.current) {
+          if (inFlightCollectionIdRef.current === collectionId) {
+            inFlightCollectionIdRef.current = null;
+          }
+          setCollectionItemsLoading(false);
+        }
       }
     },
     [
@@ -287,9 +367,16 @@ export const useRoomCollections = ({
     setCollections([]);
     setCollectionsLoading(false);
     setCollectionsError(null);
+    setCollectionScope(null);
+    setCollectionsLastFetchedAt(null);
     setSelectedCollectionId(null);
     setCollectionItemsLoading(false);
     setCollectionItemsError(null);
+    collectionCacheRef.current = {};
+    inFlightCollectionIdRef.current = null;
+    latestLoadRequestIdRef.current = 0;
+    emptyCollectionRetryCountRef.current = {};
+    pausedEmptyCollectionRef.current = {};
   }, []);
 
   const resetCollectionSelection = useCallback(() => {
@@ -306,6 +393,8 @@ export const useRoomCollections = ({
     collections,
     collectionsLoading,
     collectionsError,
+    collectionScope,
+    collectionsLastFetchedAt,
     selectedCollectionId,
     collectionItemsLoading,
     collectionItemsError,
@@ -317,3 +406,4 @@ export const useRoomCollections = ({
     clearCollectionsError,
   };
 };
+

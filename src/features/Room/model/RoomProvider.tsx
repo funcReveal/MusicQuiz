@@ -18,12 +18,18 @@ import type {
   RoomState,
   RoomSummary,
 } from "./types";
-import { RoomContext, type RoomContextValue } from "./RoomContext";
+import {
+  RoomContext,
+  type RoomContextValue,
+  type RoomCreateSourceMode,
+} from "./RoomContext";
 import {
   API_URL,
   CHUNK_SIZE,
   DEFAULT_CLIP_SEC,
   DEFAULT_PAGE_SIZE,
+  PLAYER_MAX,
+  PLAYER_MIN,
   QUESTION_MAX,
   SOCKET_URL,
   WORKER_API_URL,
@@ -154,7 +160,10 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const [roomVisibilityInput, setRoomVisibilityInput] = useState<
     "public" | "private"
   >("public");
+  const [roomCreateSourceMode, setRoomCreateSourceMode] =
+    useState<RoomCreateSourceMode>("link");
   const [roomPasswordInput, setRoomPasswordInput] = useState("");
+  const [roomMaxPlayersInput, setRoomMaxPlayersInput] = useState("");
   const [joinPasswordInput, setJoinPasswordInput] = useState("");
   const [currentRoom, setCurrentRoom] = useState<RoomState["room"] | null>(
     null,
@@ -410,6 +419,8 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     collections,
     collectionsLoading,
     collectionsError,
+    collectionScope,
+    collectionsLastFetchedAt,
     selectedCollectionId,
     collectionItemsLoading,
     collectionItemsError,
@@ -976,6 +987,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     }
     const trimmed = roomNameInput.trim();
     const trimmedPassword = roomPasswordInput.trim();
+    const trimmedMaxPlayers = roomMaxPlayersInput.trim();
     if (!trimmed) {
       setStatusText("請輸入房間名稱");
       return;
@@ -984,11 +996,26 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       setStatusText("請先載入播放清單");
       return;
     }
+    if (trimmedMaxPlayers && !/^\d+$/.test(trimmedMaxPlayers)) {
+      setStatusText("人數限制格式錯誤，請輸入正整數");
+      return;
+    }
+    const desiredMaxPlayers = trimmedMaxPlayers
+      ? Number(trimmedMaxPlayers)
+      : null;
+    if (
+      desiredMaxPlayers !== null &&
+      (desiredMaxPlayers < PLAYER_MIN || desiredMaxPlayers > PLAYER_MAX)
+    ) {
+      setStatusText(`人數限制需介於 ${PLAYER_MIN} 到 ${PLAYER_MAX} 人`);
+      return;
+    }
     const desiredVisibility = roomVisibilityInput;
-    const desiredPassword =
-      desiredVisibility === "private" ? trimmedPassword || null : null;
+    const desiredPassword = trimmedPassword || null;
     const shouldApplyAccessSettings =
-      desiredVisibility !== "public" || desiredPassword !== null;
+      desiredVisibility !== "public" ||
+      desiredPassword !== null ||
+      desiredMaxPlayers !== null;
 
     const uploadId =
       crypto.randomUUID?.() ??
@@ -1037,6 +1064,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
                 roomId: state.room.id,
                 visibility: desiredVisibility,
                 password: desiredPassword,
+                maxPlayers: desiredMaxPlayers,
               },
               (settingsAck: Ack<{ room: RoomSummary }>) => {
                 if (!settingsAck) {
@@ -1063,6 +1091,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         saveRoomPassword(state.room.id, desiredPassword);
         setHostRoomPassword(desiredPassword);
         setRoomNameInput("");
+        setRoomMaxPlayersInput("");
         setStatusText(
           accessSettingsWarning
             ? `${accessSettingsWarning}（房間已建立：${state.room.name}）`
@@ -1112,6 +1141,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     playlistItems,
     questionCount,
     refreshAuthToken,
+    roomMaxPlayersInput,
     roomNameInput,
     roomVisibilityInput,
     roomPasswordInput,
@@ -1627,7 +1657,9 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const resetCreateState = useCallback(() => {
     setRoomNameInput(username ? `${username}'s room` : "我的房間");
     setRoomVisibilityInput("public");
+    setRoomCreateSourceMode("link");
     setRoomPasswordInput("");
+    setRoomMaxPlayersInput("");
     resetPlaylistState();
     resetCollectionSelection();
     clearCollectionsError();
@@ -1712,6 +1744,8 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       collections,
       collectionsLoading,
       collectionsError,
+      collectionScope,
+      collectionsLastFetchedAt,
       selectedCollectionId,
       collectionItemsLoading,
       collectionItemsError,
@@ -1729,8 +1763,12 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       setRoomNameInput,
       roomVisibilityInput,
       setRoomVisibilityInput,
+      roomCreateSourceMode,
+      setRoomCreateSourceMode,
       roomPasswordInput,
       setRoomPasswordInput,
+      roomMaxPlayersInput,
+      setRoomMaxPlayersInput,
       joinPasswordInput,
       setJoinPasswordInput,
       currentRoom,
@@ -1820,6 +1858,8 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       collections,
       collectionsLoading,
       collectionsError,
+      collectionScope,
+      collectionsLastFetchedAt,
       selectedCollectionId,
       collectionItemsLoading,
       collectionItemsError,
@@ -1834,7 +1874,9 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       rooms,
       roomNameInput,
       roomVisibilityInput,
+      roomCreateSourceMode,
       roomPasswordInput,
+      roomMaxPlayersInput,
       joinPasswordInput,
       currentRoom,
       currentRoomId,

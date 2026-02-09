@@ -2177,12 +2177,9 @@ const RoomLobbyPanel: React.FC<RoomLobbyPanelProps> = ({
               visibility={settingsVisibility}
               password={settingsPassword}
               disabled={settingsDisabled}
+              allowPasswordWhenPublic
               onVisibilityChange={(nextVisibility) => {
                 setSettingsVisibility(nextVisibility);
-                if (nextVisibility === "public") {
-                  setSettingsPassword("");
-                  setSettingsPasswordDirty(true);
-                }
                 if (settingsError) {
                   setSettingsError(null);
                 }

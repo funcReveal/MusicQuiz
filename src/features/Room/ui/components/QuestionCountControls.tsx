@@ -33,7 +33,7 @@ const QuestionCountControls: React.FC<QuestionCountControlsProps> = ({
         spacing={1}
         className="room-question-controls room-question-controls--compact"
       >
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <div className="room-question-inline">
           <Button
             variant="outlined"
             size="small"
@@ -61,7 +61,7 @@ const QuestionCountControls: React.FC<QuestionCountControlsProps> = ({
           >
             -1
           </Button>
-          <div className="room-question-pill">
+          <div className="room-question-inline-pill">
             <span>題數</span>
             <strong>{value}</strong>
           </div>
@@ -92,7 +92,7 @@ const QuestionCountControls: React.FC<QuestionCountControlsProps> = ({
           >
             最大
           </Button>
-        </Stack>
+        </div>
         <Typography variant="caption" className="room-create-muted">
           可調範圍 {rangeLabel}
         </Typography>

@@ -47,8 +47,9 @@ const RoomAccessSettingsFields: React.FC<RoomAccessSettingsFieldsProps> = ({
       ? "私人房間不會出現在房間列表，僅能透過邀請連結加入。"
       : "公開房間會顯示在房間列表，任何人都能搜尋並加入。";
 
-  const passwordHint =
-    visibility === "private"
+  const passwordHint = allowPasswordWhenPublic
+    ? "公開與私人房間都可設定密碼；留空代表不需要。"
+    : visibility === "private"
       ? "密碼為選填；若有設定，加入時需要輸入。"
       : "公開房間通常不需要密碼，可留空。";
 

@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Typography,
+} from "@mui/material";
 
 import { useRoom } from "../model/useRoom";
 
@@ -15,10 +24,14 @@ const RoomListPage: React.FC = () => {
     rooms,
     currentRoom,
     currentRoomId,
-    joinPasswordInput,
     setJoinPasswordInput,
     handleJoinRoom,
   } = useRoom();
+  const [passwordDialog, setPasswordDialog] = useState<{
+    roomId: string;
+    roomName: string;
+  } | null>(null);
+  const [passwordDraft, setPasswordDraft] = useState("");
 
   useEffect(() => {
     if (currentRoom?.id) {
@@ -39,6 +52,24 @@ const RoomListPage: React.FC = () => {
     () => (statusMode === "online" ? "目前在線" : "安靜時段"),
     [statusMode]
   );
+  const closePasswordDialog = () => {
+    setPasswordDialog(null);
+    setPasswordDraft("");
+  };
+  const openPasswordDialog = (roomId: string, roomName: string) => {
+    setJoinPasswordInput("");
+    setPasswordDraft("");
+    setPasswordDialog({ roomId, roomName });
+  };
+  const handleConfirmJoinWithPassword = () => {
+    if (!passwordDialog) return;
+    const trimmed = passwordDraft.trim();
+    if (!trimmed) return;
+    if (!/^[a-zA-Z0-9]*$/.test(trimmed)) return;
+    setJoinPasswordInput(trimmed);
+    handleJoinRoom(passwordDialog.roomId, true);
+    closePasswordDialog();
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-6 pt-4 text-[var(--mc-text)]">
@@ -169,11 +200,6 @@ const RoomListPage: React.FC = () => {
                             <h3 className="text-base font-semibold text-[var(--mc-text)]">
                               {room.name}
                             </h3>
-                            {room.hasPassword && (
-                              <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200">
-                                私密
-                              </span>
-                            )}
                             <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
                               題數 {room.gameSettings?.questionCount ?? "-"}
                             </span>
@@ -201,24 +227,15 @@ const RoomListPage: React.FC = () => {
                               已滿
                             </span>
                           )}
-                          {room.hasPassword && (
-                            <input
-                              className="w-28 rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/70 px-2 py-1 text-xs text-[var(--mc-text)] placeholder:text-slate-500 focus:border-[var(--mc-accent)] focus:outline-none"
-                              placeholder="輸入密碼"
-                              value={joinPasswordInput}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (!/^[a-zA-Z0-9]*$/.test(value)) return;
-                                setJoinPasswordInput(value);
-                              }}
-                              inputMode="text"
-                              pattern="[A-Za-z0-9]*"
-                            />
-                          )}
                           <button
-                            onClick={() =>
-                              handleJoinRoom(room.id, room.hasPassword)
-                            }
+                            onClick={() => {
+                              if (room.hasPassword) {
+                                openPasswordDialog(room.id, room.name);
+                                return;
+                              }
+                              setJoinPasswordInput("");
+                              handleJoinRoom(room.id, false);
+                            }}
                             disabled={!username || isFull}
                             className="inline-flex items-center gap-2 rounded-full border border-[var(--mc-accent)]/60 bg-[var(--mc-accent)]/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--mc-text)] transition hover:border-[var(--mc-accent)] hover:bg-[var(--mc-accent)]/40 disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -241,6 +258,46 @@ const RoomListPage: React.FC = () => {
               }
             `}
           </style>
+
+          <Dialog
+            open={Boolean(passwordDialog)}
+            onClose={closePasswordDialog}
+            fullWidth
+            maxWidth="xs"
+          >
+            <DialogTitle>輸入房間密碼</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2" sx={{ mb: 1.5, color: "text.secondary" }}>
+                {passwordDialog
+                  ? `房間「${passwordDialog.roomName}」需要密碼才能加入。`
+                  : ""}
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                size="small"
+                label="房間密碼"
+                value={passwordDraft}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!/^[a-zA-Z0-9]*$/.test(next)) return;
+                  setPasswordDraft(next);
+                }}
+                inputMode="text"
+                pattern="[A-Za-z0-9]*"
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={closePasswordDialog}>取消</Button>
+              <Button
+                variant="contained"
+                onClick={handleConfirmJoinWithPassword}
+                disabled={!passwordDraft.trim()}
+              >
+                進入
+              </Button>
+            </DialogActions>
+          </Dialog>
         </section>
       )}
     </div>

@@ -26,6 +26,12 @@ export type YoutubePlaylist = {
   thumbnail?: string;
 };
 
+export type RoomCreateSourceMode =
+  | "link"
+  | "youtube"
+  | "publicCollection"
+  | "privateCollection";
+
 export interface RoomContextValue {
   authToken: string | null;
   authUser: AuthUser | null;
@@ -54,6 +60,8 @@ export interface RoomContextValue {
   }>;
   collectionsLoading: boolean;
   collectionsError: string | null;
+  collectionScope: "owner" | "public" | null;
+  collectionsLastFetchedAt: number | null;
   selectedCollectionId: string | null;
   collectionItemsLoading: boolean;
   collectionItemsError: string | null;
@@ -61,7 +69,7 @@ export interface RoomContextValue {
   selectCollection: (collectionId: string | null) => void;
   loadCollectionItems: (
     collectionId: string,
-    options?: { readToken?: string | null },
+    options?: { readToken?: string | null; force?: boolean },
   ) => Promise<void>;
   usernameInput: string;
   setUsernameInput: (value: string) => void;
@@ -74,8 +82,12 @@ export interface RoomContextValue {
   setRoomNameInput: (value: string) => void;
   roomVisibilityInput: "public" | "private";
   setRoomVisibilityInput: (value: "public" | "private") => void;
+  roomCreateSourceMode: RoomCreateSourceMode;
+  setRoomCreateSourceMode: (value: RoomCreateSourceMode) => void;
   roomPasswordInput: string;
   setRoomPasswordInput: (value: string) => void;
+  roomMaxPlayersInput: string;
+  setRoomMaxPlayersInput: (value: string) => void;
   joinPasswordInput: string;
   setJoinPasswordInput: (value: string) => void;
   currentRoom: RoomState["room"] | null;
