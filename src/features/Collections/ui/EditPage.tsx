@@ -366,10 +366,7 @@ const EditPage = () => {
   });
   const isReadOnly = !authToken || authExpired;
   useEffect(() => {
-    if (
-      collectionId &&
-      skipRouteResetOnNextParamRef.current === collectionId
-    ) {
+    if (collectionId && skipRouteResetOnNextParamRef.current === collectionId) {
       skipRouteResetOnNextParamRef.current = null;
       setActiveCollectionId(collectionId);
       return;
@@ -1449,7 +1446,7 @@ const EditPage = () => {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-none flex-col gap-3 overflow-x-hidden min-h-0">
+    <div className="mx-auto flex w-full max-w-none flex-col gap-3 overflow-x-hidden min-h-0 mb-0">
       {/* <div className="w-full md:w-full lg:w-3/5 mx-auto space-y-4"> */}
       <EditHeader
         title={collectionTitle}

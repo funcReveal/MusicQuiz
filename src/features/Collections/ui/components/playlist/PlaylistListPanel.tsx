@@ -144,6 +144,7 @@ const SortableRow = ({
             alt={item.title}
             className="h-full w-full object-cover"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-500">
@@ -215,6 +216,7 @@ const OverlayCard = ({
           alt={item.title}
           className="h-full w-full object-cover"
           loading="lazy"
+          decoding="async"
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-500">

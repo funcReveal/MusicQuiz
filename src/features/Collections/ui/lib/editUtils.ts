@@ -56,8 +56,17 @@ export const createServerId = () => createLocalId();
 export const videoUrlFromId = (videoId: string) =>
   `https://www.youtube.com/watch?v=${videoId}`;
 
-export const thumbnailFromId = (videoId: string) =>
-  `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+export type YoutubeThumbnailSize = "default" | "mq" | "hq";
+
+// Prefer smaller thumbnails to keep memory usage reasonable when rendering long lists.
+export const thumbnailFromId = (
+  videoId: string,
+  size: YoutubeThumbnailSize = "mq",
+) => {
+  const key =
+    size === "hq" ? "hqdefault" : size === "default" ? "default" : "mqdefault";
+  return `https://img.youtube.com/vi/${videoId}/${key}.jpg`;
+};
 
 export const extractVideoId = (url: string | undefined | null) => {
   if (!url) return null;
