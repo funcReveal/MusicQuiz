@@ -6,6 +6,7 @@
   useState,
   type ReactNode,
 } from "react";
+import { useLocation } from "react-router-dom";
 
 import type {
   Ack,
@@ -139,6 +140,11 @@ const formatAckError = (prefix: string, error?: string) => {
 export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
+  const { pathname } = useLocation();
+  const shouldConnectSocket =
+    pathname.startsWith("/rooms") || pathname.startsWith("/invited");
+  const socketSuspendedRef = useRef(false);
+
   const [usernameInput, setUsernameInput] = useState(
     () => getStoredUsername() ?? "",
   );
@@ -735,8 +741,15 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
 
   useEffect(() => {
     if (!username || authLoading) return;
+    if (!shouldConnectSocket) {
+      socketSuspendedRef.current = true;
+      setIsConnected(false);
+      setRouteRoomResolved(true);
+      return;
+    }
     let cancelled = false;
     const init = async () => {
+      socketSuspendedRef.current = false;
       let token = authToken;
       if (token) {
         token = await ensureFreshAuthToken({
@@ -810,6 +823,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         }
       },
       onDisconnect: () => {
+        if (socketSuspendedRef.current) {
+          setIsConnected(false);
+          setRouteRoomResolved(true);
+          return;
+        }
         setIsConnected(false);
         setStatusText("與伺服器斷線，將嘗試自動恢復");
         setRouteRoomResolved(false);
@@ -949,12 +967,14 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
 
     return () => {
       cancelled = true;
+      socketSuspendedRef.current = true;
       disconnectRoomSocket(socketRef.current);
       socketRef.current = null;
     };
   }, [
     username,
     authLoading,
+    shouldConnectSocket,
     clientId,
     authToken,
     refreshAuthToken,

@@ -195,6 +195,7 @@ export const useRoomAuth = ({
           throw new Error(payload?.error ?? "Google 登入失敗");
         }
         persistAuth(payload.token, payload.user);
+
         setStatusText("Google 登入成功");
       } catch (error) {
         setStatusText(
@@ -204,7 +205,7 @@ export const useRoomAuth = ({
         setAuthLoading(false);
       }
     },
-    [apiUrl, persistAuth, setStatusText],
+    [apiUrl, persistAuth, setStatusText, workerUrl],
   );
 
   const ensureGoogleScript = () => {
@@ -260,6 +261,7 @@ export const useRoomAuth = ({
             redirect_uri: redirectUri,
             access_type: "offline",
             prompt: "consent",
+            include_granted_scopes: true,
             callback: (response: { code?: string; error?: string }) => {
               if (!response?.code) {
                 setStatusText(response?.error ?? "Google 登入失敗");

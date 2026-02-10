@@ -16,6 +16,7 @@ declare global {
             redirect_uri: string;
             access_type?: string;
             prompt?: string;
+            include_granted_scopes?: boolean;
             callback: (response: { code?: string; error?: string }) => void;
           }) => GoogleCodeClient;
         };
