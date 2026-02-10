@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
-import type { RefObject } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
+import { createPortal } from "react-dom";
+
 import {
   DndContext,
   DragOverlay,
+  AutoScrollActivator,
+  MeasuringStrategy,
   PointerSensor,
   closestCenter,
   useSensor,
@@ -17,6 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { List, useListCallbackRef } from "react-window";
 
 type PlaylistItemView = {
   localId: string;
@@ -36,7 +41,6 @@ type PlaylistListPanelProps = {
   onMove: (from: number, to: number) => void;
   onReorder: (from: number, to: number) => void;
   listRef: RefObject<HTMLDivElement | null>;
-  registerItemRef: (node: HTMLDivElement | null, id: string) => void;
   highlightIndex: number | null;
   clipDurationLabel: string;
   formatSeconds: (value: number) => string;
@@ -57,6 +61,11 @@ type PlaylistListPanelProps = {
 };
 
 type SortableRowProps = {
+  ariaAttributes?: {
+    "aria-posinset": number;
+    "aria-setsize": number;
+    role: "listitem";
+  };
   item: PlaylistItemView;
   index: number;
   isFirst: boolean;
@@ -65,13 +74,13 @@ type SortableRowProps = {
   isHighlighted: boolean;
   clipDurationLabel: string;
   formatSeconds: (value: number) => string;
-  registerItemRef: (node: HTMLDivElement | null, id: string) => void;
   onSelect: (index: number) => void;
   onRemove: (index: number) => void;
   onMove: (from: number, to: number) => void;
+  outerStyle?: CSSProperties;
 };
 
-const SortableRow = ({
+const RowCard = ({
   item,
   index,
   isFirst,
@@ -80,38 +89,37 @@ const SortableRow = ({
   isHighlighted,
   clipDurationLabel,
   formatSeconds,
-  registerItemRef,
   onSelect,
   onRemove,
   onMove,
-}: SortableRowProps) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.localId });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  dndHandle,
+  dimmed,
+}: {
+  item: PlaylistItemView;
+  index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  isActive: boolean;
+  isHighlighted: boolean;
+  clipDurationLabel: string;
+  formatSeconds: (value: number) => string;
+  onSelect?: (index: number) => void;
+  onRemove?: (index: number) => void;
+  onMove?: (from: number, to: number) => void;
+  dndHandle?: ReactNode;
+  dimmed?: boolean;
+}) => {
   return (
     <div
-      ref={(node) => {
-        setNodeRef(node);
-        registerItemRef(node, item.localId);
-      }}
-      style={style}
-      onClick={() => onSelect(index)}
+      onClick={onSelect ? () => onSelect(index) : undefined}
       onKeyDown={(event) => {
+        if (!onSelect) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect(index);
         }
       }}
-      className={`relative flex items-center gap-3 rounded-xl border p-2 text-left transition-colors ${
+      className={`relative flex items-center gap-3 rounded-xl border p-2 text-left transition-[border-color,background-color,box-shadow,transform,opacity] duration-150 ${
         isActive
           ? "border-[var(--mc-accent)] bg-[var(--mc-surface-strong)]"
           : "border-[var(--mc-border)] bg-[var(--mc-surface)]/60 hover:border-[var(--mc-accent)]/60"
@@ -119,25 +127,28 @@ const SortableRow = ({
         isHighlighted
           ? "ring-1 ring-[var(--mc-accent)]/80 shadow-[0_0_0_1px_rgba(245,158,11,0.35)]"
           : ""
-      } ${isDragging ? "opacity-0 pointer-events-none" : ""}`}
-      {...attributes}
-      {...listeners}
+      } ${dimmed ? "opacity-35" : ""}`}
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
     >
+      {dndHandle}
       <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--mc-surface-strong)]">
         <span className="absolute left-1 top-1 rounded bg-[var(--mc-surface)]/80 px-1 py-0.5 text-[9px] text-[var(--mc-text)]">
           {index + 1}
         </span>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(index);
-          }}
-          className="absolute right-1 top-1 rounded bg-[var(--mc-surface)]/80 px-1 text-[9px] text-[var(--mc-text)] hover:bg-rose-500/80"
-          aria-label="Delete"
-        >
-          X
-        </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove(index);
+            }}
+            className="absolute right-1 top-1 rounded bg-[var(--mc-surface)]/80 px-1 text-[9px] text-[var(--mc-text)] hover:bg-rose-500/80"
+            aria-label="Delete"
+          >
+            X
+          </button>
+        )}
         {item.thumbnail ? (
           <img
             src={item.thumbnail}
@@ -165,30 +176,107 @@ const SortableRow = ({
         <span className="rounded bg-[var(--mc-surface)]/80 px-1.5 py-0.5">
           -
         </span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onMove(index, index - 1);
-            }}
-            disabled={isFirst}
-            className="rounded px-1.5 py-0.5 hover:bg-[var(--mc-surface-strong)] disabled:opacity-40"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onMove(index, index + 1);
-            }}
-            disabled={isLast}
-            className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
-          >
-            ↓
-          </button>
-        </div>
+        {onMove && (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onMove(index, index - 1);
+              }}
+              disabled={isFirst}
+              className="rounded px-1.5 py-0.5 hover:bg-[var(--mc-surface-strong)] disabled:opacity-40"
+            >
+              ??
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onMove(index, index + 1);
+              }}
+              disabled={isLast}
+              className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
+            >
+              ??
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SortableRow = ({
+  ariaAttributes,
+  item,
+  index,
+  isFirst,
+  isLast,
+  isActive,
+  isHighlighted,
+  clipDurationLabel,
+  formatSeconds,
+  onSelect,
+  onRemove,
+  onMove,
+  outerStyle,
+}: SortableRowProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.localId });
+
+  // Important for virtualization:
+  // react-window positions rows using `outerStyle.transform: translate3d(0, y, 0)`.
+  // dnd-kit also uses a transform to move the active item.
+  // If we concatenate both transforms on the same element, they compound and the row can jump
+  // (often to the top) and the overlay won't track the pointer correctly.
+  // Split these concerns across two elements: outer for virtualization positioning,
+  // inner for DnD transform.
+  const dndTransform = CSS.Transform.toString(transform);
+  const innerStyle: CSSProperties = {
+    transform: dndTransform || undefined,
+    transition: transition || undefined,
+    zIndex: isDragging ? 2 : undefined,
+    willChange: isDragging ? "transform" : undefined,
+  };
+
+  return (
+    <div style={outerStyle} {...(ariaAttributes ?? {})} className="box-border px-0 pb-2">
+      <div ref={setNodeRef} style={innerStyle}>
+        <RowCard
+          item={item}
+          index={index}
+          isFirst={isFirst}
+          isLast={isLast}
+          isActive={isActive}
+          isHighlighted={isHighlighted}
+          clipDurationLabel={clipDurationLabel}
+          formatSeconds={formatSeconds}
+          onSelect={onSelect}
+          onRemove={onRemove}
+          onMove={onMove}
+          dimmed={isDragging}
+          dndHandle={
+            <span
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              onClick={(e) => e.stopPropagation()}
+              className="mr-1 inline-flex h-12 w-5 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface-strong)]/60 text-[10px] text-[var(--mc-text-muted)] cursor-grab active:cursor-grabbing"
+              title="Drag"
+              aria-label="Drag"
+            >
+              ::
+            </span>
+          }
+        />
       </div>
     </div>
   );
@@ -205,33 +293,23 @@ const OverlayCard = ({
   clipDurationLabel: string;
   formatSeconds: (value: number) => string;
 }) => (
-  <div className="pointer-events-none flex items-center gap-3 rounded-xl border border-[var(--mc-accent)] bg-[var(--mc-surface-strong)] p-2 text-left shadow-[0_12px_30px_-18px_rgba(0,0,0,0.9)]">
-    <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--mc-surface)]">
-      <span className="absolute left-1 top-1 rounded bg-[var(--mc-surface)]/80 px-1 py-0.5 text-[9px] text-[var(--mc-text)]">
-        {index + 1}
-      </span>
-      {item.thumbnail ? (
-        <img
-          src={item.thumbnail}
-          alt={item.title}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-500">
-          -
-        </div>
-      )}
-    </div>
-    <div className="min-w-0 flex-1">
-      <div className="truncate text-[12px] text-[var(--mc-text)]">
-        {item.title}
-      </div>
-      <div className="mt-0.5 text-[10px] text-[var(--mc-text-muted)]">
-        {item.duration ?? "--:--"} - {clipDurationLabel}{" "}
-        {formatSeconds(Math.max(0, item.endSec - item.startSec))}
-      </div>
+  <div className="pointer-events-none">
+    <div className="origin-top-left scale-[1.02] shadow-[0_18px_44px_-28px_rgba(0,0,0,0.9)]">
+      <RowCard
+        item={item}
+        index={index}
+        isFirst={false}
+        isLast={false}
+        isActive={true}
+        isHighlighted={false}
+        clipDurationLabel={clipDurationLabel}
+        formatSeconds={formatSeconds}
+        dndHandle={
+          <span className="mr-1 inline-flex h-12 w-5 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--mc-accent)]/70 bg-[var(--mc-surface-strong)]/70 text-[10px] text-[var(--mc-text)] shadow-[0_0_0_1px_rgba(245,158,11,0.35)]">
+            ::
+          </span>
+        }
+      />
     </div>
   </div>
 );
@@ -244,7 +322,6 @@ const PlaylistListPanel = ({
   onMove,
   onReorder,
   listRef,
-  registerItemRef,
   highlightIndex,
   clipDurationLabel,
   formatSeconds,
@@ -268,10 +345,15 @@ const PlaylistListPanel = ({
     () => safeItems.map((item) => item.localId),
     [safeItems],
   );
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, {
+      // Prevent accidental drags from minor pointer movements.
+      activationConstraint: { distance: 6 },
+    }),
   );
+
   const activeIndex = activeId ? itemIds.indexOf(activeId) : -1;
   const activeItem = activeIndex >= 0 ? safeItems[activeIndex] : null;
 
@@ -299,12 +381,85 @@ const PlaylistListPanel = ({
     setActiveId(null);
   };
 
+  const [listApi, setListApi] = useListCallbackRef(null);
+
+  useEffect(() => {
+    listRef.current = listApi?.element ?? null;
+  }, [listApi, listRef]);
+
+  useEffect(() => {
+    if (highlightIndex === null) return;
+    if (highlightIndex < 0 || highlightIndex >= safeItems.length) return;
+    listApi?.scrollToRow({
+      index: highlightIndex,
+      align: "center",
+      behavior: "smooth",
+    });
+  }, [highlightIndex, listApi, safeItems.length]);
+
+  type VirtualRowProps = {
+    items: PlaylistItemView[];
+    selectedIndex: number;
+    highlightIndex: number | null;
+    clipDurationLabel: string;
+    formatSeconds: (value: number) => string;
+    onSelect: (index: number) => void;
+    onRemove: (index: number) => void;
+    onMove: (from: number, to: number) => void;
+  };
+
+  // Row height is (card ~64px) + (pb-2 = 8px).
+  const ROW_HEIGHT = 72;
+
+  const Row = useCallback(({
+    ariaAttributes,
+    index,
+    style,
+    items,
+    selectedIndex,
+    highlightIndex,
+    clipDurationLabel,
+    formatSeconds,
+    onSelect,
+    onRemove,
+    onMove,
+  }: {
+    ariaAttributes: {
+      "aria-posinset": number;
+      "aria-setsize": number;
+      role: "listitem";
+    };
+    index: number;
+    style: CSSProperties;
+  } & VirtualRowProps) => {
+    const item = items[index];
+    if (!item) return <div style={style} />;
+    return (
+      <SortableRow
+        ariaAttributes={ariaAttributes}
+        item={item}
+        index={index}
+        isFirst={index === 0}
+        isLast={index === items.length - 1}
+        isActive={index === selectedIndex}
+        isHighlighted={highlightIndex === index}
+        clipDurationLabel={clipDurationLabel}
+        formatSeconds={formatSeconds}
+        onSelect={onSelect}
+        onRemove={onRemove}
+        onMove={onMove}
+        outerStyle={style}
+      />
+    );
+  }, []);
+
   return (
     <div className="space-y-2 lg:sticky self-start">
       <div className="flex items-center justify-between text-[11px] text-[var(--mc-text-muted)]">
         <span className="uppercase tracking-[0.22em]">Playlist</span>
         <span>{items.length} items</span>
       </div>
+
       <div className="relative">
         <button
           type="button"
@@ -320,6 +475,7 @@ const PlaylistListPanel = ({
             <span>Add a single track</span>
           </div>
         </button>
+
         <div
           className={`absolute left-0 top-0 z-20 w-full rounded-xl border border-[var(--mc-border)] bg-[var(--mc-surface-strong)] p-4 shadow-[0_16px_36px_-20px_rgba(0,0,0,0.8)] transition-all duration-200 ease-out ${
             singleTrackOpen
@@ -368,9 +524,7 @@ const PlaylistListPanel = ({
             />
             <input
               value={singleTrackAnswer}
-              onChange={(event) =>
-                onSingleTrackAnswerChange(event.target.value)
-              }
+              onChange={(event) => onSingleTrackAnswerChange(event.target.value)}
               placeholder="Answer"
               disabled={!canEditSingleMeta}
               className="w-full rounded-lg border border-[var(--mc-border)] bg-[var(--mc-surface)] px-2 py-1.5 text-xs text-[var(--mc-text)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -398,55 +552,71 @@ const PlaylistListPanel = ({
           </div>
         </div>
       </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        autoScroll={{
+          enabled: true,
+          activator: AutoScrollActivator.Pointer,
+          // Keep auto-scroll constrained to the virtual list scroller.
+          canScroll: (element) => element === listApi?.element,
+          // Default is 0.2/0.2; tweak slightly for a smoother "edge scroll" feel.
+          threshold: { x: 0.15, y: 0.22 },
+          acceleration: 14,
+          interval: 5,
+        }}
+        measuring={{
+          // With virtualization, droppables mount/unmount and their rects can be stale.
+          droppable: { strategy: MeasuringStrategy.Always },
+        }}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-          <div
-            ref={listRef}
-            className="space-y-2 max-h-[calc(100svh-420px)] lg:max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
-          >
-            {safeItems.map((item, idx) => {
-              const isActive = idx === selectedIndex;
-              const isHighlighted = highlightIndex === idx;
-              return (
-                <div key={item.localId} className="relative">
-                  <SortableRow
-                    item={item}
-                    index={idx}
-                    isFirst={idx === 0}
-                    isLast={idx === safeItems.length - 1}
-                    isActive={isActive}
-                    isHighlighted={isHighlighted}
-                    clipDurationLabel={clipDurationLabel}
-                    formatSeconds={formatSeconds}
-                    registerItemRef={registerItemRef}
-                    onSelect={onSelect}
-                    onRemove={onRemove}
-                    onMove={onMove}
-                  />
-                </div>
-              );
-            })}
+          <div className="h-[calc(100svh-420px)] lg:h-[calc(100vh-300px)]">
+            <List<VirtualRowProps>
+              listRef={setListApi}
+              className="h-full overflow-y-auto pr-1"
+              defaultHeight={420}
+              rowCount={safeItems.length}
+              rowHeight={ROW_HEIGHT}
+              overscanCount={6}
+              rowComponent={Row}
+              rowProps={{
+                items: safeItems,
+                selectedIndex,
+                highlightIndex,
+                clipDurationLabel,
+                formatSeconds,
+                onSelect,
+                onRemove,
+                onMove,
+              }}
+              style={{ height: "100%" }}
+            />
           </div>
         </SortableContext>
-        <DragOverlay dropAnimation={null}>
-          {activeItem ? (
-            <OverlayCard
-              item={activeItem}
-              index={activeIndex}
-              clipDurationLabel={clipDurationLabel}
-              formatSeconds={formatSeconds}
-            />
-          ) : null}
-        </DragOverlay>
+
+        {typeof document !== "undefined"
+          ? createPortal(
+              <DragOverlay adjustScale>
+                {activeItem ? (
+                  <OverlayCard
+                    item={activeItem}
+                    index={activeIndex}
+                    clipDurationLabel={clipDurationLabel}
+                    formatSeconds={formatSeconds}
+                  />
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )
+          : null}
       </DndContext>
     </div>
   );
 };
 
-export default PlaylistListPanel;
+export default memo(PlaylistListPanel);
