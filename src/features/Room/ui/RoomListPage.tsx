@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -78,7 +78,7 @@ const RoomListPage: React.FC = () => {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-[var(--mc-text-muted)]">
-                Music Quiz
+                Muizo
               </div>
               <h2 className="text-xl font-semibold text-[var(--mc-text)]">
                 房間列表

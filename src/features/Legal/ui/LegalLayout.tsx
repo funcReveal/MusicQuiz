@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 
 const LegalLayout: React.FC = () => (
@@ -7,7 +7,7 @@ const LegalLayout: React.FC = () => (
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.4em] text-[var(--mc-text-muted)]">
-            Music Quiz
+            Muizo
           </div>
           <h1 className="text-2xl font-semibold">Legal</h1>
         </div>
@@ -46,7 +46,7 @@ const LegalLayout: React.FC = () => (
       </header>
       <Outlet />
       <footer className="text-xs text-[var(--mc-text-muted)]">
-        © 2026 MusicQuiz
+        © 2026 Muizo
       </footer>
     </div>
   </div>

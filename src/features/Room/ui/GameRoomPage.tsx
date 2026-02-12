@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -351,7 +351,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
     if (typeof MediaMetadata === "undefined") return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: "Music Quiz",
+        title: "Muizo",
         artist: "",
         album: "",
       });

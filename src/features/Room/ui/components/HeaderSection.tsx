@@ -1,4 +1,4 @@
-import {
+﻿import {
   ExpandMore,
   LibraryMusic,
   Login,
@@ -25,7 +25,9 @@ import {
   Typography,
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+
+import BrandLogo from "../../../../shared/ui/BrandLogo";
 
 interface HeaderSectionProps {
   displayUsername: string;
@@ -114,6 +116,8 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
   onNavigateCollections,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isHomeRoute = location.pathname === "/" || location.pathname === "/rooms";
   const authLabel =
     authUser?.display_name || authUser?.id || displayUsername || "Guest";
   const authSubLabel = authUser?.email ?? null;
@@ -250,7 +254,17 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
       ];
 
   return (
-    <header className="flex items-center justify-end gap-4 text-[var(--mc-text)]">
+    <header className="flex items-center justify-between gap-4 text-[var(--mc-text)]">
+      {isHomeRoute ? (
+        <Link
+          to="/rooms"
+          className="inline-flex items-center rounded-2xl border border-[var(--mc-border)] bg-[var(--mc-surface)]/72 px-3 py-2 shadow-[0_12px_40px_-28px_rgba(245,158,11,0.45)] transition hover:bg-[var(--mc-surface-strong)]/82"
+        >
+          <BrandLogo compact />
+        </Link>
+      ) : (
+        <div />
+      )}
       <div className="relative inline-flex items-center">
         {authUser ? (
           <button
