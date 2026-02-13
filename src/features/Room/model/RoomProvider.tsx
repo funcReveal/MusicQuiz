@@ -79,6 +79,8 @@ import { useRoomAuth } from "./useRoomAuth";
 import { useRoomPlaylist } from "./useRoomPlaylist";
 import { useRoomCollections } from "./useRoomCollections";
 
+const ANSWER_SUBMIT_GUARD_MS = 120;
+
 const mapCollectionItemsToPlaylist = (
   collectionId: string,
   items: WorkerCollectionItem[],
@@ -339,6 +341,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [playlistViewItems, setPlaylistViewItems] = useState<PlaylistItem[]>(
     [],
   );
@@ -367,6 +370,14 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
 
   const socketRef = useRef<ClientSocket | null>(null);
+  const createRoomInFlightRef = useRef(false);
+  const pendingAnswerSubmitRef = useRef<{
+    roomId: string;
+    trackKey: string;
+    choiceIndex: number;
+  } | null>(null);
+  const answerSubmitTimerRef = useRef<number | null>(null);
+  const lastAnswerSubmitAtRef = useRef(0);
   const currentRoomIdRef = useRef<string | null>(
     currentRoomId ?? getStoredRoomId(),
   );
@@ -1178,9 +1189,8 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
         void fetchCompletePlaylist(roomId).then(setGamePlaylist);
         setStatusText("遊戲已開始，切換至遊戲頁面");
       },
-      onGameUpdated: ({ roomId, gameState, serverNow }) => {
+      onGameUpdated: ({ roomId, gameState }) => {
         if (roomId !== currentRoomIdRef.current) return;
-        syncServerOffset(serverNow);
         setGameState(gameState);
         if (gameState?.status === "playing") {
           setIsGameView(true);
@@ -1253,6 +1263,16 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       setStatusText("尚未設定使用者名稱");
       return;
     }
+    if (createRoomInFlightRef.current) {
+      setStatusText("房間建立中，請稍候");
+      return;
+    }
+    createRoomInFlightRef.current = true;
+    setIsCreatingRoom(true);
+    const releaseCreateRoomLock = () => {
+      createRoomInFlightRef.current = false;
+      setIsCreatingRoom(false);
+    };
     if (authToken) {
       const token = await ensureFreshAuthToken({
         token: authToken,
@@ -1260,6 +1280,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       });
       if (!token) {
         setStatusText("登入已過期，請重新登入");
+        releaseCreateRoomLock();
         return;
       }
     }
@@ -1268,14 +1289,17 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
     const trimmedMaxPlayers = roomMaxPlayersInput.trim();
     if (!trimmed) {
       setStatusText("請輸入房間名稱");
+      releaseCreateRoomLock();
       return;
     }
     if (playlistItems.length === 0 || !lastFetchedPlaylistId) {
       setStatusText("請先載入播放清單");
+      releaseCreateRoomLock();
       return;
     }
     if (trimmedMaxPlayers && !/^\d+$/.test(trimmedMaxPlayers)) {
       setStatusText("人數限制格式錯誤，請輸入正整數");
+      releaseCreateRoomLock();
       return;
     }
     const desiredMaxPlayers = trimmedMaxPlayers
@@ -1286,6 +1310,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       (desiredMaxPlayers < PLAYER_MIN || desiredMaxPlayers > PLAYER_MAX)
     ) {
       setStatusText(`人數限制需介於 ${PLAYER_MIN} 到 ${PLAYER_MAX} 人`);
+      releaseCreateRoomLock();
       return;
     }
     const desiredVisibility = roomVisibilityInput;
@@ -1339,9 +1364,47 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       },
     };
 
-    s.emit("createRoom", payload, async (ack: Ack<RoomState>) => {
-      if (!ack) return;
-      if (ack.ok) {
+    let createResolved = false;
+    let createFinalized = false;
+    const finalizeCreate = () => {
+      if (createFinalized) return;
+      createFinalized = true;
+      releaseCreateRoomLock();
+    };
+
+    const submitCreateRoom = (attempt: 0 | 1) => {
+      const timeoutMs = attempt === 0 ? 4_000 : 12_000;
+      const ackTimeout = window.setTimeout(() => {
+        if (createResolved || !createRoomInFlightRef.current) return;
+        if (attempt === 0) {
+          setStatusText("建立房間逾時，正在同步既有房間…");
+          submitCreateRoom(1);
+          return;
+        }
+        setStatusText("建立房間逾時，請稍後重試");
+        finalizeCreate();
+      }, timeoutMs);
+
+      s.emit("createRoom", payload, async (ack: Ack<RoomState>) => {
+        window.clearTimeout(ackTimeout);
+        if (createResolved) return;
+        if (!ack) {
+          if (attempt === 0) {
+            setStatusText("建立房間回應遺失，正在同步既有房間…");
+            submitCreateRoom(1);
+            return;
+          }
+          setStatusText("建立房間失敗：伺服器無回應");
+          finalizeCreate();
+          return;
+        }
+        if (!ack.ok) {
+          setStatusText(formatAckError("建立房間失敗", ack.error));
+          finalizeCreate();
+          return;
+        }
+
+        createResolved = true;
         const state = ack.data;
         syncServerOffset(state.serverNow);
         setCurrentRoom(
@@ -1445,10 +1508,11 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
             });
           }
         }
-      } else {
-        setStatusText(formatAckError("建立房間失敗", ack.error));
-      }
-    });
+        finalizeCreate();
+      });
+    };
+
+    submitCreateRoom(0);
   }, [
     allowCollectionClipTiming,
     authToken,
@@ -1624,15 +1688,98 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
   }, [gameState?.status, isGameView]);
 
   const handleSubmitChoice = useCallback((choiceIndex: number) => {
-    const s = getSocket();
-    if (!s || !currentRoom || !gameState) return;
+    if (!currentRoom || !gameState) return;
     if (gameState.phase !== "guess") return;
-    s.emit("submitAnswer", { roomId: currentRoom.id, choiceIndex }, (ack) => {
-      if (ack && !ack.ok) {
-        setStatusText(formatAckError("提交答案失敗", ack.error));
+    const trackKey = `${gameState.startedAt}:${gameState.currentIndex}`;
+    const previousPending = pendingAnswerSubmitRef.current;
+    if (
+      previousPending &&
+      (previousPending.roomId !== currentRoom.id ||
+        previousPending.trackKey !== trackKey)
+    ) {
+      if (answerSubmitTimerRef.current !== null) {
+        window.clearTimeout(answerSubmitTimerRef.current);
+        answerSubmitTimerRef.current = null;
       }
-    });
+      pendingAnswerSubmitRef.current = null;
+    }
+    if (
+      pendingAnswerSubmitRef.current?.roomId === currentRoom.id &&
+      pendingAnswerSubmitRef.current.trackKey === trackKey &&
+      pendingAnswerSubmitRef.current.choiceIndex === choiceIndex
+    ) {
+      return;
+    }
+    pendingAnswerSubmitRef.current = {
+      roomId: currentRoom.id,
+      trackKey,
+      choiceIndex,
+    };
+
+    const flushSubmit = () => {
+      const pending = pendingAnswerSubmitRef.current;
+      if (!pending) return;
+      pendingAnswerSubmitRef.current = null;
+      const socket = getSocket();
+      if (!socket) return;
+      lastAnswerSubmitAtRef.current = Date.now();
+      socket.emit(
+        "submitAnswer",
+        { roomId: pending.roomId, choiceIndex: pending.choiceIndex },
+        (ack) => {
+          if (!ack || ack.ok) return;
+          if (ack.error === "Not in guess phase") return;
+          setStatusText(formatAckError("提交答案失敗", ack.error));
+        },
+      );
+    };
+
+    const elapsed = Date.now() - lastAnswerSubmitAtRef.current;
+    if (elapsed >= ANSWER_SUBMIT_GUARD_MS && answerSubmitTimerRef.current === null) {
+      flushSubmit();
+      return;
+    }
+    if (answerSubmitTimerRef.current !== null) {
+      window.clearTimeout(answerSubmitTimerRef.current);
+      answerSubmitTimerRef.current = null;
+    }
+    const delay = Math.max(40, ANSWER_SUBMIT_GUARD_MS - elapsed);
+    answerSubmitTimerRef.current = window.setTimeout(() => {
+      answerSubmitTimerRef.current = null;
+      flushSubmit();
+    }, delay);
   }, [currentRoom, gameState, getSocket]);
+
+  useEffect(() => {
+    if (!gameState || gameState.phase !== "guess" || !currentRoom) {
+      if (answerSubmitTimerRef.current !== null) {
+        window.clearTimeout(answerSubmitTimerRef.current);
+        answerSubmitTimerRef.current = null;
+      }
+      pendingAnswerSubmitRef.current = null;
+      return;
+    }
+    const trackKey = `${gameState.startedAt}:${gameState.currentIndex}`;
+    const pending = pendingAnswerSubmitRef.current;
+    if (!pending) return;
+    if (pending.roomId === currentRoom.id && pending.trackKey === trackKey) return;
+    if (answerSubmitTimerRef.current !== null) {
+      window.clearTimeout(answerSubmitTimerRef.current);
+      answerSubmitTimerRef.current = null;
+    }
+    pendingAnswerSubmitRef.current = null;
+  }, [currentRoom, gameState]);
+
+  useEffect(
+    () => () => {
+      if (answerSubmitTimerRef.current !== null) {
+        window.clearTimeout(answerSubmitTimerRef.current);
+        answerSubmitTimerRef.current = null;
+      }
+      pendingAnswerSubmitRef.current = null;
+    },
+    [],
+  );
 
   const handleUpdateRoomSettings = useCallback(
     async (payload: {
@@ -2278,6 +2425,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       setInviteRoomId,
       setRouteRoomId,
       handleSetUsername,
+      isCreatingRoom,
       handleCreateRoom,
       handleJoinRoom,
       handleLeaveRoom,
@@ -2388,6 +2536,7 @@ export const RoomProvider: React.FC<{ children: ReactNode }> = ({
       setRouteRoomId,
       setPlaylistUrl,
       handleSetUsername,
+      isCreatingRoom,
       handleCreateRoom,
       handleJoinRoom,
       handleLeaveRoom,

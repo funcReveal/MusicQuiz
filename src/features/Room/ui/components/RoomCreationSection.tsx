@@ -101,6 +101,7 @@ interface RoomCreationSectionProps {
     collectionId: string,
     options?: { readToken?: string | null; force?: boolean },
   ) => void;
+  isCreatingRoom?: boolean;
   onCreateRoom: () => void;
   onJoinRoom: (roomId: string, hasPassword: boolean) => void;
   playerMin?: number;
@@ -212,6 +213,7 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = (props) => {
     onFetchCollections,
     onSelectCollection,
     onLoadCollectionItems,
+    isCreatingRoom = false,
     onCreateRoom,
     playerMin = 1,
     playerMax = 100,
@@ -1049,10 +1051,10 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = (props) => {
           variant="contained"
           size="large"
           onClick={onCreateRoom}
-          disabled={!canCreateRoom || isSourceImporting}
+          disabled={!canCreateRoom || isSourceImporting || isCreatingRoom}
           className="room-create-submit"
         >
-          建立房間
+          {isCreatingRoom ? "建立中..." : "建立房間"}
         </Button>
         <Typography variant="caption" className="room-create-muted">
           {createHelperText}
@@ -1080,4 +1082,3 @@ const RoomCreationSection: React.FC<RoomCreationSectionProps> = (props) => {
 };
 
 export default RoomCreationSection;
-

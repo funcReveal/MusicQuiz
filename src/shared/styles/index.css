@@ -1516,6 +1516,32 @@ body {
   color: #ecfdf5;
 }
 
+.game-room-score-row--revealed {
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+.game-room-score-row--answered {
+  background: rgba(251, 191, 36, 0.16);
+  border-color: rgba(251, 191, 36, 0.42);
+  color: #fef9c3;
+}
+
+.game-room-score-row--correct {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.52);
+  color: #ecfdf5;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.22),
+    0 0 18px rgba(16, 185, 129, 0.16);
+}
+
+.game-room-score-row--wrong {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.52);
+  color: #ffe4e6;
+  box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.22),
+    0 0 18px rgba(244, 63, 94, 0.16);
+}
+
 .game-room-score-row--me {
   border-color: rgba(56, 189, 248, 0.55);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);

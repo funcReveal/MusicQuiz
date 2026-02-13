@@ -459,6 +459,18 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
           order: incoming,
         };
       }
+      if (gameState.phase === "guess") {
+        if (
+          incoming.length === prev.order.length &&
+          incoming.every((clientId, idx) => clientId === prev.order[idx])
+        ) {
+          return prev;
+        }
+        return {
+          trackSessionKey: prev.trackSessionKey,
+          order: incoming,
+        };
+      }
       if (incoming.length === 0) {
         return prev;
       }
@@ -479,7 +491,12 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
         order: nextOrder,
       };
     });
-  }, [gameState.lockedClientIds, gameState.lockedOrder, trackSessionKey]);
+  }, [
+    gameState.lockedClientIds,
+    gameState.lockedOrder,
+    gameState.phase,
+    trackSessionKey,
+  ]);
 
   useEffect(() => {
     setScoreBaselineState((prev) => {
@@ -1303,8 +1320,8 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
       }
       return {
         tone: "locked" as const,
-        title: "已鎖定答案，等待公布",
-        detail: "你已作答，本題無法再修改。",
+        title: "已作答，仍可修改",
+        detail: "你已作答，倒數結束前仍可修改答案。",
       };
     }
     if (!meClientId) {
@@ -1424,20 +1441,59 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                   base: p.score,
                   gain: 0,
                 };
+                const rowAnswerState = isReveal
+                  ? hasAnswered
+                    ? scoreParts.gain > 0
+                      ? "correct"
+                      : "wrong"
+                    : "unanswered"
+                  : hasAnswered
+                    ? "answered"
+                    : "pending";
+                const answerDotClass =
+                  rowAnswerState === "correct"
+                    ? "bg-emerald-400"
+                    : rowAnswerState === "wrong"
+                      ? "bg-rose-400"
+                      : rowAnswerState === "answered"
+                        ? "bg-amber-300"
+                        : "bg-slate-500";
+                const answerDotTitle =
+                  rowAnswerState === "correct"
+                    ? "本題答對"
+                    : rowAnswerState === "wrong"
+                      ? "本題答錯"
+                      : rowAnswerState === "answered"
+                        ? "已選答案"
+                        : "尚未作答";
+                const answerChipColor: "default" | "success" | "error" | "warning" =
+                  rowAnswerState === "correct"
+                    ? "success"
+                    : rowAnswerState === "wrong"
+                      ? "error"
+                      : rowAnswerState === "answered"
+                        ? "warning"
+                        : "default";
                 return (
                   <div
                     key={p.clientId}
-                    className={`game-room-score-row flex items-center justify-between text-sm ${hasAnswered
-                      ? "game-room-score-row--locked"
-                      : ""
-                      } ${p.clientId === meClientId ? "game-room-score-row--me" : ""
-                      }`}
+                    className={`game-room-score-row flex items-center justify-between text-sm ${
+                      isReveal ? "game-room-score-row--revealed" : ""
+                    } ${
+                      rowAnswerState === "correct"
+                        ? "game-room-score-row--correct"
+                        : rowAnswerState === "wrong"
+                          ? "game-room-score-row--wrong"
+                          : rowAnswerState === "answered"
+                            ? "game-room-score-row--answered"
+                            : ""
+                    } ${p.clientId === meClientId ? "game-room-score-row--me" : ""}`}
                   >
                     <span className="truncate flex items-center gap-2">
                       {hasAnswered && (
                         <span
-                          className="h-2 w-2 rounded-full bg-emerald-400"
-                          title="已選答案"
+                          className={`h-2 w-2 rounded-full ${answerDotClass}`}
+                          title={answerDotTitle}
                         />
                       )}
                       {idx + 1}.{" "}
@@ -1450,7 +1506,7 @@ const GameRoomPage: React.FC<GameRoomPageProps> = ({
                         <Chip
                           label={`第${answerRank}答`}
                           size="small"
-                          color="success"
+                          color={answerChipColor}
                           variant="filled"
                         />
                       ) : (

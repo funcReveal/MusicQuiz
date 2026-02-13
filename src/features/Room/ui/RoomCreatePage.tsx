@@ -61,6 +61,7 @@ const RoomCreatePage: React.FC = () => {
     updatePlayDurationSec,
     updateStartOffsetSec,
     updateAllowCollectionClipTiming,
+    isCreatingRoom,
     handleFetchPlaylist,
     fetchYoutubePlaylists,
     importYoutubePlaylist,
@@ -364,6 +365,7 @@ const RoomCreatePage: React.FC = () => {
                   onAllowCollectionClipTimingChange={
                     updateAllowCollectionClipTiming
                   }
+                  isCreatingRoom={isCreatingRoom}
                   questionMin={safeQuestionMin}
                   questionMax={safeQuestionMax}
                   questionStep={questionStep}

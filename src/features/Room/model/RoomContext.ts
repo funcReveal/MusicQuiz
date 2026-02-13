@@ -135,6 +135,7 @@ export interface RoomContextValue {
   setInviteRoomId: (value: string | null) => void;
   setRouteRoomId: (value: string | null) => void;
   handleSetUsername: () => void;
+  isCreatingRoom: boolean;
   handleCreateRoom: () => Promise<void>;
   handleJoinRoom: (roomId: string, hasPassword: boolean) => void;
   handleLeaveRoom: (onLeft?: () => void) => void;
