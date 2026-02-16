@@ -117,7 +117,8 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isHomeRoute = location.pathname === "/" || location.pathname === "/rooms";
+  const isHomeRoute =
+    location.pathname === "/" || location.pathname === "/rooms";
   const authLabel =
     authUser?.display_name || authUser?.id || displayUsername || "Guest";
   const authSubLabel = authUser?.email ?? null;
@@ -162,7 +163,9 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
       setSystemStatus(payload);
     } catch (error) {
       setSystemError(
-        error instanceof Error ? error.message : "Failed to fetch system status",
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch system status",
       );
     } finally {
       setSystemLoading(false);
@@ -214,10 +217,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
           <ListItemIcon sx={{ minWidth: 30, color: "#7dd3fc" }}>
             <ManageAccounts fontSize="small" />
           </ListItemIcon>
-          <ListItemText
-            primary="編輯個人資料"
-            secondary="更新暱稱與頭像"
-          />
+          <ListItemText primary="編輯個人資料" secondary="更新暱稱與頭像" />
         </MenuItem>,
         <MenuItem
           key="logout"
@@ -258,7 +258,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
       {isHomeRoute ? (
         <Link
           to="/rooms"
-          className="inline-flex items-center rounded-2xl border border-[var(--mc-border)] bg-[var(--mc-surface)]/72 px-3 py-2 shadow-[0_12px_40px_-28px_rgba(245,158,11,0.45)] transition hover:bg-[var(--mc-surface-strong)]/82"
+          className="inline-flex items-cente px-3 py-2 transition "
         >
           <BrandLogo compact />
         </Link>
@@ -442,10 +442,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
               <ListItemIcon sx={{ minWidth: 30, color: "#fde68a" }}>
                 <MeetingRoom fontSize="small" />
               </ListItemIcon>
-              <ListItemText
-                primary="房間大廳"
-                secondary="瀏覽與加入遊戲房間"
-              />
+              <ListItemText primary="房間大廳" secondary="瀏覽與加入遊戲房間" />
             </MenuItem>
 
             {authUser && (
@@ -463,10 +460,7 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
                 <ListItemIcon sx={{ minWidth: 30, color: "#a7f3d0" }}>
                   <LibraryMusic fontSize="small" />
                 </ListItemIcon>
-                <ListItemText
-                  primary="收藏庫"
-                  secondary="管理你的題庫收藏"
-                />
+                <ListItemText primary="收藏庫" secondary="管理你的題庫收藏" />
               </MenuItem>
             )}
           </MenuList>
@@ -664,10 +658,13 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({
                       Render 容器剩餘記憶體
                     </Typography>
                     <Typography variant="body2">
-                      {systemStatus?.os.containerMemory?.remainingBytes !== null &&
+                      {systemStatus?.os.containerMemory?.remainingBytes !==
+                        null &&
                       systemStatus?.os.containerMemory?.remainingBytes !==
                         undefined
-                        ? formatBytes(systemStatus.os.containerMemory.remainingBytes)
+                        ? formatBytes(
+                            systemStatus.os.containerMemory.remainingBytes,
+                          )
                         : "N/A"}
                     </Typography>
                     <Typography variant="caption" color="var(--mc-text-muted)">

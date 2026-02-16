@@ -5,10 +5,13 @@ type BrandLogoProps = {
   className?: string;
 };
 
-const BrandLogo: React.FC<BrandLogoProps> = ({ compact = false, className }) => {
+const BrandLogo: React.FC<BrandLogoProps> = ({
+  compact = false,
+  className,
+}) => {
   return (
     <div className={`inline-flex items-center gap-3 ${className ?? ""}`.trim()}>
-      <svg
+      {/* <svg
         width={compact ? 28 : 34}
         height={compact ? 28 : 34}
         viewBox="0 0 48 48"
@@ -36,11 +39,8 @@ const BrandLogo: React.FC<BrandLogoProps> = ({ compact = false, className }) => 
           fill="url(#mqGrad)"
         />
         <circle cx="35" cy="16" r="3" fill="#fcd34d" />
-      </svg>
+      </svg> */}
       <div className="leading-none">
-        <div className="text-[10px] tracking-[0.24em] uppercase text-[var(--mc-text-muted)]">
-          Brand
-        </div>
         <div
           className={`${compact ? "text-base" : "text-lg"} font-semibold tracking-[0.08em] text-[var(--mc-text)]`}
           style={{ fontFamily: '"Newsreader", "Noto Sans TC", serif' }}
@@ -53,4 +53,3 @@ const BrandLogo: React.FC<BrandLogoProps> = ({ compact = false, className }) => 
 };
 
 export default BrandLogo;
-
